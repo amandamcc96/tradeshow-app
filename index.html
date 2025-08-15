@@ -667,7 +667,7 @@ function collectAttendeesFromEditor(){
         head.append(t, desc);
 
         const c = document.createElement("div"); c.className="card-c";
-        const inner = document.createElement("div"); inner.className="grid"; inner.style.gridTemplateColumns="2fr 1fr"; inner.style.gap="16px";
+        const inner = document.createElement("div"); inner.className="grid"; inner.style.gridTemplateColumns="1fr 2fr"; inner.style.gap="16px";
 
         const leftCol = document.createElement("div");
         if(m.description){
@@ -709,7 +709,7 @@ function collectAttendeesFromEditor(){
           rightCol.append(wrap);
         });
 
-        inner.append(leftCol, rightCol);
+      inner.append(rightCol, leftCol);
         c.append(inner);
         card.append(head, c);
         detailsCol.append(card);
