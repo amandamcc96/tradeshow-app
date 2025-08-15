@@ -13,7 +13,7 @@
       --border:#e5e7eb;
       --primary:#111827;
       --primary-50:#f3f4f6;
-      --blue:#1d4ed8;
+      --blue:##19a4d0;
       --shadow:0 1px 2px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.1);
       --radius:14px;
     }
@@ -75,11 +75,11 @@
     .ae-linkwrap{display:flex;gap:8px;align-items:center}
     /* === Blue background + interactive polish === */
 :root{
-  --bg:#1d4ed8;          /* page background */
+  --bg:##19a4d0;          /* page background */
   --card:#ffffff;        /* cards/boxes stay white */
-  --primary:#1d4ed8;     /* brand/accents */
+  --primary:##19a4d0;     /* brand/accents */
   --primary-50:#eff6ff;  /* pale blue for subtle fills */
-  --blue:#1d4ed8;
+  --blue:##19a4d0;
   --shadow-hover:0 6px 12px rgba(0,0,0,.18);
 }
 
@@ -667,7 +667,16 @@ function collectAttendeesFromEditor(){
         head.append(t, desc);
 
         const c = document.createElement("div"); c.className="card-c";
-        const inner = document.createElement("div"); inner.className="grid"; inner.style.gridTemplateColumns="2fr 1fr"; inner.style.gap="16px";
+        const inner = document.createElement("div");
+inner.className = "grid";
+// make the first column (attendees) narrower, second (details) wider
+inner.style.gridTemplateColumns = "1fr 2fr";
+inner.style.gap = "16px";
+
+// ... build leftCol (details) and rightCol (attendees)
+
+// put attendees first so it shows on the left (and on mobile it will stack first)
+inner.append(rightCol, leftCol);
 
         const leftCol = document.createElement("div");
         if(m.description){
