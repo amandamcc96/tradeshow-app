@@ -119,6 +119,31 @@ header .muted { opacity:.9; }
 
 /* Optional: underline links a touch darker on hover */
 .link:hover { filter: brightness(.95); }
+    :root{
+  --bg:#19a4d0;              /* page background */
+  --card:#ffffff;            /* keep cards white */
+  --text:#111827;            /* keep dark text (for inside cards) */
+  --border:#e5e7eb;
+
+  --primary:#19a4d0;         /* primary brand blue */
+  --primary-hover:#148fb6;   /* a bit darker for hover/focus */
+  --primary-50:#e8f7fc;      /* very light tint for subtle fills */
+  --blue:#19a4d0;            /* link color */
+}
+
+/* Make header text readable on the blue background */
+header h1,
+header .tools { color:#fff; }
+header .muted { color:rgba(255,255,255,.85); }
+
+/* Optional: nicer hover for primary buttons & active tabs */
+.btn.primary:hover{
+  background:var(--primary-hover);
+  border-color:var(--primary-hover);
+}
+.tab.active:hover{
+  background:var(--primary-hover);
+}
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
