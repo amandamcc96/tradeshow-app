@@ -71,6 +71,17 @@
   <!-- Firebase compat SDKs (no build step) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+ const firebaseConfig = {
+  apiKey: "AIzaSyAefJL7N3PBdQeGJWwjJZjfEQC8qUcpT5U",
+  authDomain: "tradeshow-assistant.firebaseapp.com",
+  projectId: "tradeshow-assistant",
+  storageBucket: "tradeshow-assistant.firebasestorage.app",
+  messagingSenderId: "865900601935",
+  appId: "1:865900601935:web:82a7b49e70f8088d40003a"
+};
+
+</script>
 </head>
 <body>
   <div class="container">
@@ -204,35 +215,6 @@
       <button class="btn primary" id="t_save">Save</button>
     </div>
   </dialog>
-
-  <script>
-  // ---------- Firebase Setup (replace with your real config) ----------
-  const firebaseConfig = {
-    // TODO: paste your Web App config here, e.g.:
-    // apiKey: "…",
-    // authDomain: "…",
-    // projectId: "…",
-    // storageBucket: "…",
-    // messagingSenderId: "…",
-    // appId: "…"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-  const COL = db.collection('tradeshow'); // collection name
-
-  // Shared doc helpers
-  async function getSharedDoc(docId, fallback) {
-    const snap = await COL.doc(docId).get();
-    return snap.exists ? snap.data().value : fallback;
-  }
-  async function setSharedDoc(docId, value) {
-    await COL.doc(docId).set({ value }, { merge: true });
-  }
-  function onSharedDoc(docId, cb) {
-    return COL.doc(docId).onSnapshot(s => { if (s.exists) cb(s.data().value); });
-  }
-  // -------------------------------------------------------------------
-  </script>
 
   <script>
   (function(){
@@ -696,28 +678,6 @@
     })();
   })();
   </script>
+  <script defer src="app.js"></script>
 </body>
 </html>
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyBgyGEDfWFIQxZ1pShmyVg5WTf7DQFl3k4",
-    authDomain: "tradeshow-assistant-app.firebaseapp.com",
-    projectId: "tradeshow-assistant-app",
-    storageBucket: "tradeshow-assistant-app.firebasestorage.app",
-    messagingSenderId: "219455226130",
-    appId: "1:219455226130:web:ec17610177af3c572d33cb",
-    measurementId: "G-VTT1EQTKWE"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
