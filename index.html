@@ -214,11 +214,11 @@ header .muted { color:rgba(255,255,255,.85); }
     <h1>
       <!-- Logo replaces the emoji -->
       <img id="brandLogo" class="brand-logo hidden" alt="Company logo" />
+        <button id="setLogoBtn" class="btn sm" type="button">🖼️ Set logo</button>
+  Tradeshow Meetings Assistant
+  <span class="muted" style="font-weight:400">— realtime</span>
+</h1>
       
-     
-      Tradeshow Meetings Assistant
-      <span class="muted" style="font-weight:400">— realtime</span>
-    </h1>
   </div>
   <div class="tools">
     <div id="importExport"></div>
@@ -932,6 +932,7 @@ function renderLogo(){
     brandLogo.removeAttribute("src");
     brandLogo.classList.add("hidden");
   }
+    if (setLogoBtn) setLogoBtn.classList.toggle("hidden", !!logoUrl);
 }
     // import/export
     function renderImportExport(){
