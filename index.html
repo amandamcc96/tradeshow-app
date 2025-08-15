@@ -144,6 +144,9 @@ header .muted { color:rgba(255,255,255,.85); }
 .tab.active:hover{
   background:var(--primary-hover);
 }
+    .brand{display:flex;gap:10px;align-items:center}
+.brand-logo{height:28px;width:auto;border-radius:6px;background:#fff;padding:2px;box-shadow:var(--shadow)}
+.brand-logo.hidden{display:none}
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -178,8 +181,12 @@ header .muted { color:rgba(255,255,255,.85); }
 <body>
   <div class="container">
     <header>
-      <h1>📅 Tradeshow Meetings Assistant <span class="muted" style="font-weight:400">— realtime</span></h1>
+     <h1 class="brand">
+  <img id="brandLogo" class="brand-logo hidden" alt="Company logo" />
+  <span>📅 Tradeshow Meetings Assistant <span class="muted" style="font-weight:400">— realtime</span></span>
+</h1>
       <div class="tools">
+        <button id="setLogoBtn" class="btn">🖼 Set Logo</button>
         <div id="importExport"></div>
         <span class="muted" title="Settings">⚙️</span>
       </div>
@@ -245,6 +252,21 @@ header .muted { color:rgba(255,255,255,.85); }
   </div>
 
   <!-- Dialogs -->
+  <dialog id="logoDialog">
+  <div class="dialog-c">
+    <h3 style="margin:0 0 8px 0">Set logo URL</h3>
+    <div class="col gap12">
+      <input id="logoInput" placeholder="https://example.com/logo.png" />
+      <div class="muted" style="font-size:12px">
+        Tip: use a transparent PNG or SVG if you have one.
+      </div>
+    </div>
+  </div>
+  <div class="dialog-actions">
+    <button class="btn" id="logoCancel">Cancel</button>
+    <button class="btn primary" id="logoSave">Save</button>
+  </div>
+</dialog>
 <dialog id="meetingDialog">
   <div class="dialog-c">
     <h3 id="dlgTitle" style="margin:0 0 8px 0">New meeting</h3>
@@ -370,7 +392,7 @@ header .muted { color:rgba(255,255,255,.85); }
     let meetings = structuredClone(SAMPLE_MEETINGS);
     let travel   = structuredClone(SAMPLE_TRAVEL);
     let gptUrl   = "";
-
+let logoUrl = "";
     let activeDate = (meetings[0]?.startISO) || new Date().toISOString();
     let view = "agenda";
 
@@ -388,6 +410,12 @@ header .muted { color:rgba(255,255,255,.85); }
     const setGptBtn = $("#setGptBtn");
     const gptHint = $("#gptHint");
     const travelSection = $("#travelSection");
+    const brandLogo  = $("#brandLogo");
+const setLogoBtn = $("#setLogoBtn");
+const logoDialog = $("#logoDialog");
+const logoInput  = $("#logoInput");
+const logoSave   = $("#logoSave");
+const logoCancel = $("#logoCancel");
 
     // dialogs
     const meetingDialog = $("#meetingDialog");
@@ -862,7 +890,15 @@ async function saveMeetingFromDialog(){
         gptHint.style.display = "block";
       }
     }
-
+function renderLogo(){
+  if(logoUrl){
+    brandLogo.src = logoUrl;
+    brandLogo.classList.remove("hidden");
+  }else{
+    brandLogo.removeAttribute("src");
+    brandLogo.classList.add("hidden");
+  }
+}
     // import/export
     function renderImportExport(){
       const root = document.createElement("div");
@@ -927,7 +963,16 @@ async function saveMeetingFromDialog(){
   await setSharedDoc('travel', travel);
   travelDialog.close();
 };
-
+setLogoBtn.addEventListener('click', () => {
+  logoInput.value = logoUrl || '';
+  logoDialog.showModal();
+});
+logoCancel.addEventListener('click', () => logoDialog.close());
+logoSave.addEventListener('click', async () => {
+  logoUrl = (logoInput.value || '').trim();
+  await setSharedDoc('logoUrl', logoUrl);
+  logoDialog.close();
+});
     function renderAll(){
       renderHeaderControls();
       (view==="agenda"? (agendaList.classList.remove("hidden"), hourlyGrid.classList.add("hidden"), renderAgenda())
@@ -935,7 +980,9 @@ async function saveMeetingFromDialog(){
       renderDetails();
       renderTravel();
       renderGpt();
+        renderLogo();  
       renderImportExport();
+      
     }
 
     // INITIAL LOAD from Firestore + realtime subscriptions
@@ -944,17 +991,19 @@ async function saveMeetingFromDialog(){
       const meetingsVal = await getSharedDoc('meetings', SAMPLE_MEETINGS);
       const travelVal   = await getSharedDoc('travel',   SAMPLE_TRAVEL);
       const gptVal      = await getSharedDoc('gptUrl',   "");
+        const logoVal     = await getSharedDoc('logoUrl',   "");
 
       meetings = meetingsVal || [];
       travel   = travelVal   || [];
       gptUrl   = gptVal      || "";
-
+ logoUrl  = logoVal     || ""; 
       renderAll();
 
       // realtime listeners
       onSharedDoc('meetings', v => { meetings = v || []; renderAll(); });
       onSharedDoc('travel',   v => { travel   = v || []; renderAll(); });
       onSharedDoc('gptUrl',   v => { gptUrl   = v || ""; renderAll(); });
+       onSharedDoc('logoUrl',  v => { logoUrl  = v || ""; renderLogo(); }); 
     })();
   })();
   </script>
