@@ -87,6 +87,23 @@
 header h1,
 header .muted { color:#fff; }
 header .muted { opacity:.9; }
+.head-left{ display:flex; align-items:center; gap:12px; }
+
+/* Make the logo align well with the text */
+h1{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:0;
+}
+
+.brand-logo{
+  height:24px;     /* tweak to taste (20–28px usually looks good) */
+  width:auto;
+  object-fit:contain;
+  border-radius:6px; /* optional */
+}
+
 
 /* Hover lift for cards and list items */
 .card{
@@ -147,6 +164,18 @@ header .muted { color:rgba(255,255,255,.85); }
     .brand{display:flex;gap:10px;align-items:center}
 .brand-logo{height:28px;width:auto;border-radius:6px;background:#fff;padding:2px;box-shadow:var(--shadow)}
 .brand-logo.hidden{display:none}
+    .head-left{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.brand-logo{
+  height:32px;   /* tweak if you want it bigger/smaller */
+  width:auto;
+  object-fit:contain;
+  border-radius:6px; /* optional little rounding */
+}
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -180,17 +209,21 @@ header .muted { color:rgba(255,255,255,.85); }
 </head>
 <body>
   <div class="container">
-    <header>
-     <h1 class="brand">
-  <img id="brandLogo" class="brand-logo hidden" alt="Company logo" />
-  <span>📅 Tradeshow Meetings Assistant <span class="muted" style="font-weight:400">— realtime</span></span>
-</h1>
-      <div class="tools">
-        <button id="setLogoBtn" class="btn">🖼 Set Logo</button>
-        <div id="importExport"></div>
-        <span class="muted" title="Settings">⚙️</span>
-      </div>
-    </header>
+  <header>
+  <div class="head-left">
+    <h1>
+      <!-- Logo replaces the emoji -->
+      <img id="brandLogo" class="brand-logo hidden" alt="Company logo" />
+      
+     
+      Tradeshow Meetings Assistant
+      <span class="muted" style="font-weight:400">— realtime</span>
+    </h1>
+  </div>
+  <div class="tools">
+    <div id="importExport"></div>
+  </div>
+</header>
 
     <div class="grid">
       <!-- Left -->
@@ -416,6 +449,7 @@ const logoDialog = $("#logoDialog");
 const logoInput  = $("#logoInput");
 const logoSave   = $("#logoSave");
 const logoCancel = $("#logoCancel");
+
 
     // dialogs
     const meetingDialog = $("#meetingDialog");
@@ -891,10 +925,10 @@ async function saveMeetingFromDialog(){
       }
     }
 function renderLogo(){
-  if(logoUrl){
+  if (logoUrl) {
     brandLogo.src = logoUrl;
     brandLogo.classList.remove("hidden");
-  }else{
+  } else {
     brandLogo.removeAttribute("src");
     brandLogo.classList.add("hidden");
   }
