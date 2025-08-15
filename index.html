@@ -72,15 +72,29 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script>
- const firebaseConfig = {
-  apiKey: "AIzaSyAefJL7N3PBdQeGJWwjJZjfEQC8qUcpT5U",
-  authDomain: "tradeshow-assistant.firebaseapp.com",
-  projectId: "tradeshow-assistant",
-  storageBucket: "tradeshow-assistant.firebasestorage.app",
-  messagingSenderId: "865900601935",
-  appId: "1:865900601935:web:82a7b49e70f8088d40003a"
-};
+  const firebaseConfig = {
+    apiKey: "AIzaSyAefJL7N3PBdQeGJWwjJZjfEQC8qUcpT5U",
+    authDomain: "tradeshow-assistant.firebaseapp.com",
+    projectId: "tradeshow-assistant",
+    storageBucket: "tradeshow-assistant.firebasestorage.app",
+    messagingSenderId: "865900601935",
+    appId: "1:865900601935:web:82a7b49e70f8088d40003a"
+  };
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 
+  const db = firebase.firestore();
+  const COL = db.collection('tradeshow');
+
+  async function getSharedDoc(docId, fallback) {
+    const snap = await COL.doc(docId).get();
+    return snap.exists ? snap.data().value : fallback;
+  }
+  async function setSharedDoc(docId, value) {
+    return COL.doc(docId).set({ value }, { merge: true });
+  }
+  function onSharedDoc(docId, cb) {
+    return COL.doc(docId).onSnapshot(s => { if (s.exists) cb(s.data().value); });
+  }
 </script>
 </head>
 <body>
@@ -557,24 +571,33 @@
       m_desc.value = m?.description || "";
       meetingDialog.showModal();
     }
-    async function saveMeetingFromDialog(){
-      const id = meetingDialog.dataset.editId;
-      const payload = {
-        id: id || uid(),
-        title: m_title.value.trim(),
-        location: m_location.value.trim(),
-        booth: m_booth.value.trim(),
-        startISO: new Date(m_start.value).toISOString(),
-        endISO: new Date(m_end.value).toISOString(),
-        attendees: id? (meetings.find(x=>x.id===id)?.attendees || []): [],
-        description: m_desc.value.trim(),
-      };
-      if(!payload.title){ alert("Title required"); return; }
-      if(id){ meetings = meetings.map(x => x.id===id? {...x, ...payload}: x); }
-      else { meetings = [...meetings, payload]; }
-      await setSharedDoc('meetings', meetings);
-      meetingDialog.close();
-    }
+async function saveMeetingFromDialog(){
+  const id = meetingDialog.dataset.editId;
+  const payload = {
+    id: id || uid(),
+    title: m_title.value.trim(),
+    location: m_location.value.trim(),
+    booth: m_booth.value.trim(),
+    startISO: new Date(m_start.value).toISOString(),
+    endISO: new Date(m_end.value).toISOString(),
+    attendees: id ? (meetings.find(x=>x.id===id)?.attendees || []) : [],
+    description: m_desc.value.trim(),
+  };
+  if (!payload.title) { alert("Title required"); return; }
+
+  // Optimistic UI
+  meetings = id ? meetings.map(x => x.id===id ? { ...x, ...payload } : x)
+                : [...meetings, payload];
+  meetingDialog.close();
+  renderAll();
+
+  try {
+    await setSharedDoc('meetings', meetings);
+  } catch (err) {
+    console.error('Save failed', err);
+    alert('Cloud save failed. Your change is visible locally but not synced.');
+  }
+}
 
     function renderGpt(){
       if(gptUrl){
@@ -678,6 +701,5 @@
     })();
   })();
   </script>
-  <script defer src="app.js"></script>
 </body>
 </html>
