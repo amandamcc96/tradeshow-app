@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tradeshow Meetings Assistant — Realtime</title>
+  <style>
+    :root{
+      --bg:#f6f7f8;
+      --card:#ffffff;
+      --muted:#6b7280;
+      --text:#111827;
+      --border:#e5e7eb;
+      --primary:#111827;
+      --primary-50:#f3f4f6;
+      --blue:#1d4ed8;
+      --shadow:0 1px 2px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.1);
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif}
+    .container{padding:24px;max-width:1200px;margin:0 auto}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+    h1{font-size:22px;margin:0;display:flex;gap:8px;align-items:center}
+    .grid{display:grid;gap:24px}
+    @media(min-width:1024px){.grid{grid-template-columns:1fr 2fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .card-h{padding:16px 16px 8px 16px;border-bottom:1px solid var(--border)}
+    .card-h .title{font-weight:700;display:flex;gap:8px;align-items:center}
+    .card-h .desc{font-size:12px;color:var(--muted);margin-top:4px}
+    .card-c{padding:16px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .muted{color:var(--muted)}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);background:#fff;border-radius:10px;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+    .btn.icon{width:36px;height:36px;justify-content:center}
+    .btn.sm{padding:6px 10px;font-size:12px}
+    .btn[disabled]{opacity:.55;cursor:not-allowed}
+    .chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px}
+    .list{display:flex;flex-direction:column;gap:10px}
+    .item{border:1px solid var(--border);border-radius:12px;background:#fff}
+    .item-c{padding:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .item .title{font-size:13px;font-weight:600}
+    .item .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:38vw}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    input, textarea, select{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff}
+    textarea{min-height:70px}
+    .kicker{font-size:12px;font-weight:700;margin:8px 0}
+    .attendee{border:1px solid var(--border);border-radius:12px;padding:10px}
+    .avatar{width:44px;height:44px;border-radius:999px;background:#eee;display:inline-flex;align-items:center;justify-content:center}
+    .hour-grid{border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .hour-row{display:grid;grid-template-columns:110px 1fr;border-bottom:1px solid var(--border)}
+    .hour-row:last-child{border-bottom:none}
+    .hour-label{padding:8px 12px;text-align:right;color:var(--muted);font-size:12px}
+    .hour-cell{padding:8px 12px}
+    .ghost{height:24px;border-radius:8px;background:var(--primary-50)}
+    .meeting-pill{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px}
+    .tools{display:flex;gap:8px;align-items:center}
+    .tabs{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+    .tab{padding:6px 10px;border:0;background:#fff;cursor:pointer}
+    .tab.active{background:var(--primary);color:#fff}
+    .spacer{height:8px}
+    .hidden{display:none}
+    .hr{height:1px;background:var(--border);margin:12px 0}
+    dialog{border:none;border-radius:14px;width:min(720px,96vw);} dialog::backdrop{background:rgba(0,0,0,.35)}
+    .dialog-c{padding:16px} .dialog-actions{display:flex;justify-content:flex-end;gap:8px;padding:0 16px 16px}
+    .link{color:var(--blue);text-decoration:underline}
+    .flex{display:flex}.gap8{gap:8px}.gap12{gap:12px}.gap16{gap:16px}.col{display:flex;flex-direction:column}.wfull{width:100%}.end{justify-content:flex-end}
+  </style>
+
+  <!-- Firebase compat SDKs (no build step) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📅 Tradeshow Meetings Assistant <span class="muted" style="font-weight:400">— realtime</span></h1>
+      <div class="tools">
+        <div id="importExport"></div>
+        <span class="muted" title="Settings">⚙️</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Left -->
+      <div class="col gap16">
+        <div class="card">
+          <div class="card-h">
+            <div class="title">📆 Schedule</div>
+            <div class="desc">Switch between an agenda and an hourly grid for any show day.</div>
+          </div>
+          <div class="card-c">
+            <div class="row">
+              <div class="tools">
+                <button class="btn icon" id="prevDay" title="Previous day">◀</button>
+                <div id="activeDateLbl" style="font-weight:600"></div>
+                <button class="btn icon" id="nextDay" title="Next day">▶</button>
+              </div>
+              <div class="tabs">
+                <button class="tab active" id="tabAgenda">Agenda</button>
+                <button class="tab" id="tabHourly">Hourly</button>
+              </div>
+            </div>
+
+            <div id="agendaList" class="list" style="margin-top:12px"></div>
+            <div id="hourlyGrid" class="hidden" style="margin-top:12px"></div>
+
+            <div class="spacer"></div>
+            <button id="addMeetingBtn" class="btn primary wfull">➕ Add meeting</button>
+          </div>
+        </div>
+
+        <!-- Ask our GPT -->
+        <div class="card">
+          <div class="card-h">
+            <div class="title">🔗 Ask our GPT</div>
+            <div class="desc">Opens your team’s GPT for questions during the event.</div>
+          </div>
+          <div class="card-c">
+            <div class="tools">
+              <a id="openGpt" class="btn" href="#" target="_blank" rel="noreferrer">Open GPT</a>
+              <button id="setGptBtn" class="btn">⚙️ Set Link</button>
+            </div>
+            <div id="gptHint" class="muted" style="margin-top:8px;font-size:12px">No link set yet. Click <em>Set Link</em> to add one.</div>
+          </div>
+        </div>
+
+        <!-- Travel -->
+        <div class="card">
+          <div class="card-h">
+            <div class="title">✈️ Travel</div>
+            <div class="desc">Store flight, hotel, and ground confirmations.</div>
+          </div>
+          <div class="card-c" id="travelSection"></div>
+        </div>
+      </div>
+
+      <!-- Right -->
+      <div class="col gap16" id="detailsCol"></div>
+    </div>
+  </div>
+
+  <!-- Dialogs -->
+  <dialog id="meetingDialog">
+    <div class="dialog-c">
+      <h3 id="dlgTitle" style="margin:0 0 8px 0">New meeting</h3>
+      <div class="col gap12">
+        <input id="m_title" placeholder="Title" />
+        <div class="two">
+          <input id="m_location" placeholder="Location" />
+          <input id="m_booth" placeholder="Booth" />
+        </div>
+        <div class="two">
+          <input id="m_start" type="datetime-local" />
+          <input id="m_end" type="datetime-local" />
+        </div>
+        <textarea id="m_desc" placeholder="Description / goals"></textarea>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" id="dlgCancel">Cancel</button>
+      <button class="btn primary" id="dlgSave">Save</button>
+    </div>
+  </dialog>
+
+  <dialog id="gptDialog">
+    <div class="dialog-c">
+      <h3 style="margin:0 0 8px 0">Set your GPT link</h3>
+      <div class="col gap12">
+        <input id="gptInput" placeholder="https://chat.openai.com/g/g-XXXXX-your-gpt"/>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" id="gptCancel">Cancel</button>
+      <button class="btn primary" id="gptSave">Save</button>
+    </div>
+  </dialog>
+
+  <dialog id="travelDialog">
+    <div class="dialog-c">
+      <h3 style="margin:0 0 8px 0">New travel</h3>
+      <div class="col gap12">
+        <div class="two">
+          <select id="t_type">
+            <option value="flight">Flight</option>
+            <option value="hotel">Hotel</option>
+            <option value="ground">Ground</option>
+          </select>
+          <input id="t_label" placeholder="Label (e.g., ATL → BOS)" />
+        </div>
+        <div class="two">
+          <input id="t_conf" placeholder="Confirmation #" />
+          <input id="t_details" placeholder="Details" />
+        </div>
+        <div class="two">
+          <input id="t_start" type="datetime-local" />
+          <input id="t_end" type="datetime-local" />
+        </div>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" id="t_cancel">Cancel</button>
+      <button class="btn primary" id="t_save">Save</button>
+    </div>
+  </dialog>
+
+  <script>
+  // ---------- Firebase Setup (replace with your real config) ----------
+  const firebaseConfig = {
+    // TODO: paste your Web App config here, e.g.:
+    // apiKey: "…",
+    // authDomain: "…",
+    // projectId: "…",
+    // storageBucket: "…",
+    // messagingSenderId: "…",
+    // appId: "…"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const COL = db.collection('tradeshow'); // collection name
+
+  // Shared doc helpers
+  async function getSharedDoc(docId, fallback) {
+    const snap = await COL.doc(docId).get();
+    return snap.exists ? snap.data().value : fallback;
+  }
+  async function setSharedDoc(docId, value) {
+    await COL.doc(docId).set({ value }, { merge: true });
+  }
+  function onSharedDoc(docId, cb) {
+    return COL.doc(docId).onSnapshot(s => { if (s.exists) cb(s.data().value); });
+  }
+  // -------------------------------------------------------------------
+  </script>
+
+  <script>
+  (function(){
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+    const uid = () => Math.random().toString(36).slice(2,9);
+    const fmtTime = (iso) => new Date(iso).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    const fmtDate = (iso) => new Date(iso).toLocaleDateString([], {year:"numeric", month:"short", day:"2-digit"});
+    const sameDay = (aISO, bISO) => {
+      const a = new Date(aISO), b = new Date(bISO);
+      return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+    };
+    const hoursBetween = (startISO, endISO) =>
+      (new Date(endISO).getTime() - new Date(startISO).getTime())/(1000*60*60);
+
+    // seed
+    const seedDate = (()=>{
+      const now = new Date();
+      return new Date(now.getFullYear(), 8, 16, 9, 0, 0);
+    })();
+    const SAMPLE_ATTENDEES = [
+      {id:uid(), name:"Chris Williams", title:"VP Partnerships", company:"NorthBridge", linkedin:"", photoUrl:"", notes:"Loves concise dashboards; ask about Zoho practice."},
+      {id:uid(), name:"Amanda Lee", title:"Head of Marketing", company:"Protocol80", linkedin:"", photoUrl:"", notes:"Interested in co-marketing webinars and case studies."},
+      {id:uid(), name:"Hudson Carter", title:"Solutions Architect", company:"CloudTrailz", linkedin:"", photoUrl:"", notes:"Deep NetSuite background; prefers technical prep notes."},
+    ];
+    const SAMPLE_MEETINGS = [
+      { id:uid(), title:"NorthBridge + Commercient intro", description:"Explore reseller fit; prioritize Zoho + Monday integrations.",
+        location:"Hall B – Meeting Room 3", booth:"B122",
+        startISO:new Date(seedDate.getTime()).toISOString(),
+        endISO:new Date(seedDate.getTime()+60*60*1000).toISOString(),
+        attendees:[SAMPLE_ATTENDEES[0]], talkingPoints:"15% target share…", prepChecklist:"Review Zoho…"},
+      { id:uid(), title:"Protocol80 co-marketing sprint", description:"Finalize webinar topics and case study pipeline.",
+        location:"Expo Café (near Hall A)", booth:"A210",
+        startISO:new Date(seedDate.getTime()+2*60*60*1000).toISOString(),
+        endISO:new Date(seedDate.getTime()+3*60*60*1000).toISOString(),
+        attendees:[SAMPLE_ATTENDEES[1]], talkingPoints:"Partner Spotlight…", prepChecklist:"Bring sample…"},
+      { id:uid(), title:"CloudTrailz technical sync", description:"Deep-dive NetSuite<->HubSpot patterns; managed custom objects beta lessons.",
+        location:"Booth C341", booth:"C341",
+        startISO:new Date(seedDate.getTime()+4*60*60*1000).toISOString(),
+        endISO:new Date(seedDate.getTime()+5*60*60*1000).toISOString(),
+        attendees:[SAMPLE_ATTENDEES[2]], talkingPoints:"QuickBooks Desktop…", prepChecklist:"Open architecture…"},
+    ];
+    const SAMPLE_TRAVEL = [
+      {id:uid(), type:"flight", label:"ATL → BOS (AC 1234)", confirmation:"Z7X9QW",
+        startISO:new Date(seedDate.getTime()-24*60*60*1000).toISOString(),
+        endISO:new Date(seedDate.getTime()-22*60*60*1000).toISOString(), details:"Seat 14C; carry-on only."},
+      {id:uid(), type:"hotel", label:"Westin Seaport, Boston", confirmation:"H987654",
+        startISO:new Date(seedDate.getTime()-1*60*60*1000).toISOString(),
+        endISO:new Date(seedDate.getTime()+2*24*60*60*1000).toISOString(), details:"Reservation under Commercient; breakfast included."},
+    ];
+
+    // state (will be replaced by Firestore values on load)
+    let meetings = structuredClone(SAMPLE_MEETINGS);
+    let travel   = structuredClone(SAMPLE_TRAVEL);
+    let gptUrl   = "";
+
+    let activeDate = (meetings[0]?.startISO) || new Date().toISOString();
+    let view = "agenda";
+
+    // elements
+    const activeDateLbl = $("#activeDateLbl");
+    const prevDayBtn = $("#prevDay");
+    const nextDayBtn = $("#nextDay");
+    const tabAgenda = $("#tabAgenda");
+    const tabHourly = $("#tabHourly");
+    const agendaList = $("#agendaList");
+    const hourlyGrid = $("#hourlyGrid");
+    const addMeetingBtn = $("#addMeetingBtn");
+    const detailsCol = $("#detailsCol");
+    const openGptA = $("#openGpt");
+    const setGptBtn = $("#setGptBtn");
+    const gptHint = $("#gptHint");
+    const travelSection = $("#travelSection");
+
+    // dialogs
+    const meetingDialog = $("#meetingDialog");
+    const dlgSave = $("#dlgSave");
+    const dlgCancel = $("#dlgCancel");
+    const dlgTitle = $("#dlgTitle");
+    const m_title = $("#m_title");
+    const m_location = $("#m_location");
+    const m_booth = $("#m_booth");
+    const m_start = $("#m_start");
+    const m_end = $("#m_end");
+    const m_desc = $("#m_desc");
+
+    const gptDialog = $("#gptDialog");
+    const gptInput = $("#gptInput");
+    const gptSave = $("#gptSave");
+    const gptCancel = $("#gptCancel");
+
+    const travelDialog = $("#travelDialog");
+    const t_type = $("#t_type");
+    const t_label = $("#t_label");
+    const t_conf = $("#t_conf");
+    const t_details = $("#t_details");
+    const t_start = $("#t_start");
+    const t_end = $("#t_end");
+    const t_save = $("#t_save");
+    const t_cancel = $("#t_cancel");
+
+    function daysFromMeetings(list){
+      const unique = Array.from(new Set(list.map(m => new Date(m.startISO).toDateString())));
+      return unique.map(d => new Date(d)).sort((a,b)=>a.getTime()-b.getTime());
+    }
+    function shiftDay(dir){
+      const days = daysFromMeetings(meetings);
+      const idx = days.findIndex(d => sameDay(d.toISOString(), activeDate));
+      const next = days[idx+dir];
+      if(next) activeDate = next.toISOString();
+      renderAll();
+    }
+    function renderHeaderControls(){
+      activeDateLbl.textContent = fmtDate(activeDate);
+      tabAgenda.classList.toggle("active", view==="agenda");
+      tabHourly.classList.toggle("active", view==="hourly");
+    }
+
+    function renderAgenda(){
+      agendaList.innerHTML = "";
+      const dayMeetings = meetings
+        .filter(m => sameDay(m.startISO, activeDate))
+        .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
+
+      if(dayMeetings.length===0){
+        const div = document.createElement("div");
+        div.className = "muted";
+        div.textContent = "No meetings for this date.";
+        agendaList.append(div);
+      }
+
+      dayMeetings.forEach(m => {
+        const card = document.createElement("div");
+        card.className = "item";
+        const c = document.createElement("div");
+        c.className = "item-c";
+        const left = document.createElement("div");
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = `${fmtTime(m.startISO)}–${fmtTime(m.endISO)} • ${m.title}`;
+        const sub = document.createElement("div");
+        sub.className = "sub";
+        sub.textContent = `${m.location||""}${m.booth? ` • Booth ${m.booth}`:""}`;
+        left.append(title, sub);
+        const tools = document.createElement("div");
+        tools.className = "tools";
+        const edit = document.createElement("button");
+        edit.className="btn sm";
+        edit.textContent="✏️";
+        edit.onclick = ()=> openMeetingDialog(m);
+        const del = document.createElement("button");
+        del.className="btn sm";
+        del.textContent="🗑️";
+        del.onclick = async ()=>{
+          meetings = meetings.filter(x => x.id!==m.id);
+          await setSharedDoc('meetings', meetings);
+        };
+        tools.append(edit, del);
+        c.append(left, tools);
+        card.append(c);
+        agendaList.append(card);
+      });
+    }
+
+    function renderHourly(){
+      hourlyGrid.innerHTML = "";
+      const dayMeetings = meetings
+        .filter(m => sameDay(m.startISO, activeDate))
+        .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
+
+      const wrap = document.createElement("div");
+      wrap.className = "hour-grid";
+      const start = new Date(activeDate); start.setHours(7,0,0,0);
+      for(let i=0;i<13;i++){
+        const h = new Date(start.getTime()+i*60*60*1000);
+        const row = document.createElement("div");
+        row.className = "hour-row";
+        const lbl = document.createElement("div");
+        lbl.className = "hour-label";
+        lbl.textContent = h.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+        const cell = document.createElement("div");
+        cell.className = "hour-cell";
+        const slot = dayMeetings.filter(m => new Date(m.startISO)<=h && new Date(m.endISO)>h);
+        if(slot.length===0){
+          const g = document.createElement("div");
+          g.className = "ghost";
+          cell.append(g);
+        }else{
+          const box = document.createElement("div");
+          box.style.display="flex"; box.style.flexWrap="wrap"; box.style.gap="8px";
+          slot.forEach(m => {
+            const pill = document.createElement("span");
+            pill.className = "meeting-pill";
+            pill.innerHTML = `<strong>${m.title}</strong> <span class="muted">${fmtTime(m.startISO)}–${fmtTime(m.endISO)}</span>`;
+            box.append(pill);
+          });
+          cell.append(box);
+        }
+        row.append(lbl, cell);
+        wrap.append(row);
+      }
+      hourlyGrid.append(wrap);
+    }
+
+    function renderDetails(){
+      detailsCol.innerHTML = "";
+      const dayMeetings = meetings
+        .filter(m => sameDay(m.startISO, activeDate))
+        .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
+
+      if(dayMeetings.length===0){
+        const card = document.createElement("div"); card.className="card";
+        card.innerHTML = `<div class="card-h"><div class="title">No meetings this day</div></div>
+                          <div class="card-c muted">Add one using the button on the left.</div>`;
+        detailsCol.append(card);
+        return;
+      }
+
+      dayMeetings.forEach(m => {
+        const card = document.createElement("div"); card.className="card";
+        const head = document.createElement("div"); head.className="card-h";
+        const t = document.createElement("div"); t.className="title row";
+        const left = document.createElement("span"); left.textContent = m.title;
+        const right = document.createElement("span"); right.className="muted";
+        right.textContent = `${fmtDate(m.startISO)} • ${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
+        t.append(left, right);
+        const desc = document.createElement("div"); desc.className="desc";
+        desc.textContent = `${hoursBetween(m.startISO, m.endISO).toFixed(1)} hrs • ${m.location || ""}${m.booth?` • Booth ${m.booth}`:""}`;
+        head.append(t, desc);
+
+        const c = document.createElement("div"); c.className="card-c";
+        const inner = document.createElement("div"); inner.className="grid"; inner.style.gridTemplateColumns="2fr 1fr"; inner.style.gap="16px";
+
+        const leftCol = document.createElement("div");
+        if(m.description){
+          const p = document.createElement("p"); p.textContent = m.description; leftCol.append(p);
+        }
+        if(m.talkingPoints){
+          const k = document.createElement("div"); k.className="kicker"; k.textContent = "Suggested talking points";
+          const box = document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
+          box.textContent = m.talkingPoints; leftCol.append(k, box);
+        }
+        if(m.prepChecklist){
+          const k = document.createElement("div"); k.className="kicker"; k.textContent = "Prep checklist";
+          const box = document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
+          box.textContent = m.prepChecklist; leftCol.append(k, box);
+        }
+        const edit = document.createElement("button"); edit.className="btn"; edit.textContent="✏️ Edit details";
+        edit.onclick = ()=> openMeetingDialog(m);
+        leftCol.append(edit);
+
+        const rightCol = document.createElement("div");
+        const ak = document.createElement("div"); ak.className="kicker"; ak.textContent="Attendees";
+        rightCol.append(ak);
+        (m.attendees||[]).forEach(a => {
+          const wrap = document.createElement("div"); wrap.className="attendee";
+          const row = document.createElement("div"); row.className="row";
+          const who = document.createElement("div"); who.className="row"; who.style.gap="12px";
+          const av = document.createElement("div"); av.className="avatar"; av.textContent = (a.name||"?").slice(0,1).toUpperCase();
+          const meta = document.createElement("div");
+          const nm = document.createElement("div"); nm.style.fontWeight="600"; nm.textContent=a.name;
+          const sub = document.createElement("div"); sub.className="muted"; sub.style.fontSize="12px";
+          sub.textContent=[a.title,a.company].filter(Boolean).join(" • ");
+          meta.append(nm, sub);
+          who.append(av, meta);
+          const link = document.createElement("a"); link.className="link"; link.textContent="LinkedIn"; link.target="_blank"; link.rel="noreferrer";
+          if(a.linkedin) link.href=a.linkedin; else { link.href="#"; link.style.pointerEvents="none"; link.style.opacity=".5"; }
+          row.append(who, link);
+          if(a.notes){ const notes=document.createElement("div"); notes.style.marginTop="6px"; notes.textContent=a.notes; wrap.append(row, notes); }
+          else wrap.append(row);
+          rightCol.append(wrap);
+        });
+
+        inner.append(leftCol, rightCol);
+        c.append(inner);
+        card.append(head, c);
+        detailsCol.append(card);
+      });
+    }
+
+    function renderTravel(){
+      const root = travelSection;
+      root.innerHTML = "";
+      const add = document.createElement("button"); add.className="btn"; add.textContent="➕ Add travel";
+      add.onclick = ()=>{
+        t_type.value="flight"; t_label.value=""; t_conf.value=""; t_details.value="";
+        t_start.value=""; t_end.value="";
+        travelDialog.dataset.editId = ""; travelDialog.showModal();
+      };
+      root.append(add);
+      root.append(document.createElement("div")).className="spacer";
+
+      if(travel.length===0){
+        const div = document.createElement("div"); div.className="muted"; div.textContent="No travel saved.";
+        root.append(div); return;
+      }
+
+      travel.forEach(t => {
+        const row = document.createElement("div");
+        row.className="item"; const inner=document.createElement("div"); inner.className="item-c";
+        const left = document.createElement("div");
+        const head = document.createElement("div"); head.className="title"; head.textContent = `[${t.type.toUpperCase()}] ${t.label}`;
+        const sub = document.createElement("div"); sub.className="muted"; sub.style.fontSize="12px";
+        const bits=[];
+        if(t.confirmation) bits.push(`Conf#: ${t.confirmation}`);
+        if(t.startISO) bits.push(`Start ${fmtDate(t.startISO)} ${fmtTime(t.startISO)}`);
+        if(t.endISO) bits.push(`End ${fmtDate(t.endISO)} ${fmtTime(t.endISO)}`);
+        sub.textContent = bits.join(" • ");
+        if(t.details){ const d=document.createElement("div"); d.style.fontSize="12px"; d.textContent=t.details; left.append(head, sub, d); }
+        else left.append(head, sub);
+        const tools = document.createElement("div"); tools.className="tools";
+        const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
+        edit.onclick = ()=>{
+          t_type.value=t.type; t_label.value=t.label; t_conf.value=t.confirmation||""; t_details.value=t.details||"";
+          t_start.value = t.startISO? new Date(t.startISO).toISOString().slice(0,16): "";
+          t_end.value = t.endISO? new Date(t.endISO).toISOString().slice(0,16): "";
+          travelDialog.dataset.editId = t.id; travelDialog.showModal();
+        };
+        const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
+        del.onclick = async ()=>{
+          travel = travel.filter(x => x.id!==t.id);
+          await setSharedDoc('travel', travel);
+        };
+        tools.append(edit, del);
+        inner.append(left, tools);
+        row.append(inner);
+        root.append(row);
+      });
+    }
+
+    function openMeetingDialog(m){
+      meetingDialog.dataset.editId = m?.id || "";
+      dlgTitle.textContent = m? "Edit meeting":"New meeting";
+      m_title.value = m?.title || "";
+      m_location.value = m?.location || "";
+      m_booth.value = m?.booth || "";
+      m_start.value = (m? new Date(m.startISO): new Date()).toISOString().slice(0,16);
+      m_end.value = (m? new Date(m.endISO): new Date(Date.now()+60*60*1000)).toISOString().slice(0,16);
+      m_desc.value = m?.description || "";
+      meetingDialog.showModal();
+    }
+    async function saveMeetingFromDialog(){
+      const id = meetingDialog.dataset.editId;
+      const payload = {
+        id: id || uid(),
+        title: m_title.value.trim(),
+        location: m_location.value.trim(),
+        booth: m_booth.value.trim(),
+        startISO: new Date(m_start.value).toISOString(),
+        endISO: new Date(m_end.value).toISOString(),
+        attendees: id? (meetings.find(x=>x.id===id)?.attendees || []): [],
+        description: m_desc.value.trim(),
+      };
+      if(!payload.title){ alert("Title required"); return; }
+      if(id){ meetings = meetings.map(x => x.id===id? {...x, ...payload}: x); }
+      else { meetings = [...meetings, payload]; }
+      await setSharedDoc('meetings', meetings);
+      meetingDialog.close();
+    }
+
+    function renderGpt(){
+      if(gptUrl){
+        openGptA.href = gptUrl;
+        openGptA.removeAttribute('disabled');
+        gptHint.style.display = "none";
+      }else{
+        openGptA.href="#";
+        gptHint.style.display = "block";
+      }
+    }
+
+    // import/export
+    function renderImportExport(){
+      const root = document.createElement("div");
+      const inp = document.createElement("input");
+      inp.type = "file"; inp.accept = "application/json"; inp.className = "hidden";
+      const btnImport = document.createElement("button"); btnImport.className = "btn sm"; btnImport.textContent = "⬆️ Import";
+      const btnExport = document.createElement("button"); btnExport.className = "btn sm"; btnExport.textContent = "⬇️ Export";
+      btnImport.onclick = () => inp.click();
+      inp.onchange = async (e)=>{
+        const f = e.target.files?.[0]; if(!f) return;
+        const text = await f.text();
+        try{
+          const parsed = JSON.parse(text);
+          if(parsed.meetings) meetings = parsed.meetings;
+          if(parsed.travel) travel = parsed.travel;
+          if("gptUrl" in parsed) gptUrl = parsed.gptUrl || "";
+          await setSharedDoc('meetings', meetings);
+          await setSharedDoc('travel', travel);
+          await setSharedDoc('gptUrl', gptUrl);
+        }catch(err){ alert("Invalid JSON file"); }
+      };
+      btnExport.onclick = ()=>{
+        const blob = new Blob([JSON.stringify({meetings, travel, gptUrl}, null, 2)], {type:"application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url;
+        a.download = `tradeshow-data-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
+      };
+      root.append(btnImport, btnExport, inp);
+      $("#importExport").innerHTML = "";
+      $("#importExport").append(root);
+    }
+
+    // event wiring
+    prevDayBtn.onclick = ()=> shiftDay(-1);
+    nextDayBtn.onclick = ()=> shiftDay(1);
+    tabAgenda.onclick = ()=>{ view="agenda"; renderAll(); };
+    tabHourly.onclick = ()=>{ view="hourly"; renderAll(); };
+    addMeetingBtn.onclick = ()=> openMeetingDialog();
+    dlgCancel.onclick = ()=> meetingDialog.close();
+    dlgSave.onclick = ()=> saveMeetingFromDialog();
+
+    setGptBtn.onclick = ()=>{ gptInput.value = gptUrl || ""; gptDialog.showModal(); };
+    gptCancel.onclick = ()=> gptDialog.close();
+    gptSave.onclick = async ()=>{ gptUrl = (gptInput.value||"").trim(); await setSharedDoc('gptUrl', gptUrl); gptDialog.close(); };
+
+    t_cancel.onclick = ()=> travelDialog.close();
+    t_save.onclick = async ()=>{
+      const id = travelDialog.dataset.editId;
+      const payload = {
+        id: id || uid(), type: t_type.value, label: t_label.value.trim(),
+        confirmation: t_conf.value.trim(), details: t_details.value.trim(),
+        startISO: t_start.value ? new Date(t_start.value).toISOString(): undefined,
+        endISO: t_end.value ? new Date(t_end.value).toISOString(): undefined,
+      };
+      if(!payload.label){ alert("Label required"); return; }
+      if(id){ travel = travel.map(x=> x.id===id? {...x, ...payload}: x); }
+      else { travel = [...travel, payload]; }
+      await setSharedDoc('travel', travel);
+      travelDialog.close();
+    };
+
+    function renderAll(){
+      renderHeaderControls();
+      (view==="agenda"? (agendaList.classList.remove("hidden"), hourlyGrid.classList.add("hidden"), renderAgenda())
+                      : (hourlyGrid.classList.remove("hidden"), agendaList.classList.add("hidden"), renderHourly()));
+      renderDetails();
+      renderTravel();
+      renderGpt();
+      renderImportExport();
+    }
+
+    // INITIAL LOAD from Firestore + realtime subscriptions
+    (async function init(){
+      // load once (or create docs if missing)
+      const meetingsVal = await getSharedDoc('meetings', SAMPLE_MEETINGS);
+      const travelVal   = await getSharedDoc('travel',   SAMPLE_TRAVEL);
+      const gptVal      = await getSharedDoc('gptUrl',   "");
+
+      meetings = meetingsVal || [];
+      travel   = travelVal   || [];
+      gptUrl   = gptVal      || "";
+
+      renderAll();
+
+      // realtime listeners
+      onSharedDoc('meetings', v => { meetings = v || []; renderAll(); });
+      onSharedDoc('travel',   v => { travel   = v || []; renderAll(); });
+      onSharedDoc('gptUrl',   v => { gptUrl   = v || ""; renderAll(); });
+    })();
+  })();
+  </script>
+</body>
+</html>
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyBgyGEDfWFIQxZ1pShmyVg5WTf7DQFl3k4",
+    authDomain: "tradeshow-assistant-app.firebaseapp.com",
+    projectId: "tradeshow-assistant-app",
+    storageBucket: "tradeshow-assistant-app.firebasestorage.app",
+    messagingSenderId: "219455226130",
+    appId: "1:219455226130:web:ec17610177af3c572d33cb",
+    measurementId: "G-VTT1EQTKWE"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
