@@ -225,6 +225,14 @@ header .muted { color:rgba(255,255,255,.85); }
 
 /* If you previously centered GPT content, undo it to avoid odd spacing */
 #gptCard, #gptCard .card-h, #gptCard .desc { text-align: left; }
+    #gptCard .tools { gap: 10px; }
+
+#gptCard .btn.sm {
+  min-height: 40px;      /* taller button */
+  padding: 8px 14px;     /* more breathing room */
+  font-size: 14px;       /* slightly larger text */
+  border-radius: 12px;   /* a touch more rounded */
+}
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -280,6 +288,7 @@ header .muted { color:rgba(255,255,255,.85); }
       <div class="tools">
         <a id="openGpt" class="btn sm" href="#" target="_blank" rel="noreferrer">Open GPT</a>
         <button id="setGptBtn" class="btn sm">⚙️ Set Link</button>
+        
       </div>
     </div>
     <div id="gptHint" class="desc">No link set yet. Click <em>Set Link</em> to add one.</div>
