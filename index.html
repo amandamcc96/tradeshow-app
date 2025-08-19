@@ -176,23 +176,26 @@ header .muted { color:rgba(255,255,255,.85); }
   object-fit:contain;
   border-radius:6px; /* optional little rounding */
 }
-    /* Center content in the Ask our GPT card + add spacing below it */
+/* Compact GPT card */
 #gptCard { 
-  text-align: center; 
-  margin-bottom: 24px;   /* space before the Schedule/Agenda section */
+  margin-bottom: 16px;            /* space before Schedule/Agenda */
 }
-#gptCard .card-h .title { 
-  justify-content: center;  /* title row is flex; center it */
+#gptCard .card-h { 
+  padding: 10px 12px;             /* tighter header */
 }
-#gptCard .card-h .desc { 
-  text-align: center; 
+#gptCard .tools .btn,
+#gptCard .btn.sm {
+  padding: 4px 8px;               /* smaller buttons */
+  font-size: 12px;
 }
-#gptCard .tools { 
-  justify-content: center;   /* center the buttons */
+#gptCard .desc { 
+  margin-top: 6px; 
 }
-#gptCard #gptHint { 
-  text-align: center; 
-}
+
+/* If you previously centered the GPT card, undo it */
+#gptCard { text-align: left; }
+#gptCard .card-h .title { justify-content: flex-start; }
+#gptCard .tools { justify-content: flex-start; }
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -241,19 +244,16 @@ header .muted { color:rgba(255,255,255,.85); }
     <div id="importExport"></div>
   </div>
 </header>
-  <div id="gptCard" class="card">
+<div id="gptCard" class="card">
   <div class="card-h">
-    <div class="title">🔗 Ask our GPT</div>
-    <div class="desc">Opens your team’s GPT for questions during the event.</div>
-  </div>
-  <div class="card-c">
-    <div class="tools">
-      <a id="openGpt" class="btn" href="#" target="_blank" rel="noreferrer">Open GPT</a>
-      <button id="setGptBtn" class="btn">⚙️ Set Link</button>
+    <div class="row" style="justify-content:flex-start;gap:8px;">
+      <div class="tools" style="gap:8px;">
+        <a id="openGpt" class="btn sm" href="#" target="_blank" rel="noreferrer">Open GPT</a>
+        <button id="setGptBtn" class="btn sm">⚙️ Set Link</button>
+      </div>
+      <div class="title">🔗 Ask our GPT</div>
     </div>
-    <div id="gptHint" class="muted" style="margin-top:8px;font-size:12px">
-      No link set yet. Click <em>Set Link</em> to add one.
-    </div>
+    <div id="gptHint" class="desc">No link set yet. Click <em>Set Link</em> to add one.</div>
   </div>
 </div>
 
