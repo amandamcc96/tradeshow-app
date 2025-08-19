@@ -261,7 +261,10 @@ header .muted { color:rgba(255,255,255,.85); }
   }
   function onSharedDoc(docId, cb) {
     return COL.doc(docId).onSnapshot(s => { if (s.exists) cb(s.data().value); });
-  }
+  
+  
+}
+
 </script>
 </head>
 <body>
@@ -478,7 +481,20 @@ header .muted { color:rgba(255,255,255,.85); }
         startISO:new Date(seedDate.getTime()-1*60*60*1000).toISOString(),
         endISO:new Date(seedDate.getTime()+2*24*60*60*1000).toISOString(), details:"Reservation under Commercient; breakfast included."},
     ];
+const MEETINGS = COL.doc('meetings').collection('items');
+const TRAVEL   = COL.doc('travel').collection('items');
 
+function upsertMeeting(m){
+  const id = m.id || uid();
+  return MEETINGS.doc(id).set({ ...m, id }, { merge: true });
+}
+function deleteMeeting(id){ return MEETINGS.doc(id).delete(); }
+
+function upsertTravel(t){
+  const id = t.id || uid();
+  return TRAVEL.doc(id).set({ ...t, id }, { merge: true });
+}
+function deleteTravel(id){ return TRAVEL.doc(id).delete(); }
     // state (will be replaced by Firestore values on load)
     let meetings = structuredClone(SAMPLE_MEETINGS);
     let travel   = structuredClone(SAMPLE_TRAVEL);
@@ -700,50 +716,62 @@ function collectAttendeesFromEditor(){
     }
 
     function renderAgenda(){
-      agendaList.innerHTML = "";
-      const dayMeetings = meetings
-        .filter(m => sameDay(m.startISO, activeDate))
-        .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
+ 
+ agendaList.innerHTML = "";
+  const dayMeetings = meetings
+    .filter(m => sameDay(m.startISO, activeDate))
+    .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
 
-      if(dayMeetings.length===0){
-        const div = document.createElement("div");
-        div.className = "muted";
-        div.textContent = "No meetings for this date.";
-        agendaList.append(div);
-      }
+  if(dayMeetings.length===0){
+    const div = document.createElement("div");
+    div.className = "muted";
+    div.textContent = "No meetings for this date.";
+    agendaList.append(div);
+    return;
+  }
 
-      dayMeetings.forEach(m => {
-        const card = document.createElement("div");
-        card.className = "item";
-        const c = document.createElement("div");
-        c.className = "item-c";
-        const left = document.createElement("div");
-        const title = document.createElement("div");
-        title.className = "title";
-        title.textContent = `${fmtTime(m.startISO)}–${fmtTime(m.endISO)} • ${m.title}`;
-        const sub = document.createElement("div");
-        sub.className = "sub";
-        sub.textContent = `${m.location||""}${m.booth? ` • Booth ${m.booth}`:""}`;
-        left.append(title, sub);
-        const tools = document.createElement("div");
-        tools.className = "tools";
-        const edit = document.createElement("button");
-        edit.className="btn sm";
-        edit.textContent="✏️";
-        edit.onclick = ()=> openMeetingDialog(m);
-        const del = document.createElement("button");
-        del.className="btn sm";
-        del.textContent="🗑️";
-        del.onclick = async ()=>{
-          meetings = meetings.filter(x => x.id!==m.id);
-          await setSharedDoc('meetings', meetings);
-        };
-        tools.append(edit, del);
-        c.append(left, tools);
-        card.append(c);
-        agendaList.append(card);
-      });
-    }
+  dayMeetings.forEach(m => {
+    const card = document.createElement("div");
+    card.className = "item";
+
+    const c = document.createElement("div");
+    c.className = "item-c";
+
+    const left = document.createElement("div");
+
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = `${fmtTime(m.startISO)}–${fmtTime(m.endISO)} • ${m.title}`;
+
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = `${m.location||""}${m.booth? ` • Booth ${m.booth}`:""}`;
+    left.append(title, sub);
+
+    const tools = document.createElement("div");
+    tools.className = "tools";
+
+    const edit = document.createElement("button");
+    edit.className = "btn sm";
+    edit.textContent = "✏️";
+    edit.onclick = () => openMeetingDialog(m);
+
+    const del = document.createElement("button");
+    del.className = "btn sm";
+    del.textContent = "🗑️";
+    del.onclick = async () => {
+      if (!confirm("Delete this meeting?")) return;
+      try { await deleteMeeting(m.id); }
+      catch(e){ console.error(e); alert("Delete failed."); }
+    };
+
+    tools.append(edit, del);
+
+    c.append(left, tools);
+    card.append(c);
+    agendaList.append(card);
+  });
+}
 
     function renderHourly(){
       hourlyGrid.innerHTML = "";
@@ -900,10 +928,11 @@ function collectAttendeesFromEditor(){
           travelDialog.dataset.editId = t.id; travelDialog.showModal();
         };
         const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
-        del.onclick = async ()=>{
-          travel = travel.filter(x => x.id!==t.id);
-          await setSharedDoc('travel', travel);
-        };
+   del.onclick = async () => {
+  if (!confirm("Delete this travel item?")) return;
+  try { await deleteTravel(t.id); }
+  catch(e){ console.error(e); alert("Delete failed."); }
+};
         tools.append(edit, del);
         inner.append(left, tools);
         row.append(inner);
@@ -942,33 +971,27 @@ function collectAttendeesFromEditor(){
 }
 async function saveMeetingFromDialog(){
   const id = meetingDialog.dataset.editId;
-
-  // Collect attendees from editor
-  const editedAttendees = collectAttendeesFromEditor();
-
   const payload = {
     id: id || uid(),
     title: m_title.value.trim(),
     location: m_location.value.trim(),
     booth: m_booth.value.trim(),
     startISO: new Date(m_start.value).toISOString(),
-    endISO: new Date(m_end.value).toISOString(),
-    attendees: editedAttendees,
+    endISO:   new Date(m_end.value).toISOString(),
+    attendees: collectAttendeesFromEditor(),
     description: m_desc.value.trim(),
   };
   if (!payload.title){ alert("Title required"); return; }
+  if (new Date(payload.endISO) <= new Date(payload.startISO)){
+    alert("End time must be after start time."); return;
+  }
 
-  // Optimistic UI update
-  meetings = id ? meetings.map(x => x.id===id ? { ...x, ...payload } : x)
-                : [...meetings, payload];
-  meetingDialog.close();
-  renderAll();
-
-  try {
-    await setSharedDoc('meetings', meetings);
-  } catch (err) {
-    console.error('Save failed', err);
-    alert('Cloud save failed. Your change is visible locally but not synced.');
+   try {
+    await upsertMeeting(payload);   // <-- write to subcollection
+    meetingDialog.close();
+  } catch (e){
+    console.error(e);
+    alert('Cloud save failed.');
   }
 }
 
@@ -991,39 +1014,71 @@ function renderLogo(){
     brandLogo.classList.add("hidden");
   }
     if (setLogoBtn) setLogoBtn.classList.toggle("hidden", !!logoUrl);
-}
-    // import/export
-    function renderImportExport(){
-      const root = document.createElement("div");
-      const inp = document.createElement("input");
-      inp.type = "file"; inp.accept = "application/json"; inp.className = "hidden";
-      const btnImport = document.createElement("button"); btnImport.className = "btn sm"; btnImport.textContent = "⬆️ Import";
-      const btnExport = document.createElement("button"); btnExport.className = "btn sm"; btnExport.textContent = "⬇️ Export";
-      btnImport.onclick = () => inp.click();
-      inp.onchange = async (e)=>{
-        const f = e.target.files?.[0]; if(!f) return;
-        const text = await f.text();
-        try{
-          const parsed = JSON.parse(text);
-          if(parsed.meetings) meetings = parsed.meetings;
-          if(parsed.travel) travel = parsed.travel;
-          if("gptUrl" in parsed) gptUrl = parsed.gptUrl || "";
-          await setSharedDoc('meetings', meetings);
-          await setSharedDoc('travel', travel);
-          await setSharedDoc('gptUrl', gptUrl);
-        }catch(err){ alert("Invalid JSON file"); }
-      };
-      btnExport.onclick = ()=>{
-        const blob = new Blob([JSON.stringify({meetings, travel, gptUrl}, null, 2)], {type:"application/json"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url;
-        a.download = `tradeshow-data-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
-      };
-      root.append(btnImport, btnExport, inp);
-      $("#importExport").innerHTML = "";
-      $("#importExport").append(root);
-    }
+ }
 
+async function renderImportExport(){
+  const root = document.createElement("div");
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "application/json"; inp.className = "hidden";
+
+  const btnImport = document.createElement("button"); btnImport.className = "btn sm"; btnImport.textContent = "⬆️ Import";
+  const btnExport = document.createElement("button"); btnExport.className = "btn sm"; btnExport.textContent = "⬇️ Export";
+
+  btnImport.onclick = () => inp.click();
+  inp.onchange = async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    try{
+      const parsed = JSON.parse(await f.text());
+
+      // Replace ALL meetings
+      const ms = await MEETINGS.get();
+      let batch = db.batch();
+      ms.forEach(doc => batch.delete(doc.ref));
+      (parsed.meetings || []).forEach(m => {
+        const id = m.id || uid();
+        batch.set(MEETINGS.doc(id), { ...m, id });
+      });
+      await batch.commit();
+      
+
+      // Replace ALL travel
+      const ts = await TRAVEL.get();
+      batch = db.batch();
+      ts.forEach(doc => batch.delete(doc.ref));
+      (parsed.travel || []).forEach(t => {
+        const id = t.id || uid();
+        batch.set(TRAVEL.doc(id), { ...t, id });
+      });
+      await batch.commit();
+
+      if ('gptUrl' in parsed)  await setSharedDoc('gptUrl',  parsed.gptUrl  || '');
+      if ('logoUrl' in parsed) await setSharedDoc('logoUrl', parsed.logoUrl || '');
+    }catch(err){
+      console.error(err);
+      alert("Invalid JSON file");
+    }
+  };
+
+  btnExport.onclick = async () => {
+    const [msSnap, tsSnap] = await Promise.all([MEETINGS.get(), TRAVEL.get()]);
+    const file = {
+      meetings: msSnap.docs.map(d => d.data()),
+      travel:   tsSnap.docs.map(d => d.data()),
+      gptUrl,
+      logoUrl
+    };
+    const blob = new Blob([JSON.stringify(file, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `tradeshow-data-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  root.append(btnImport, btnExport, inp);
+  $("#importExport").innerHTML = "";
+  $("#importExport").append(root);
+}
     // event wiring
     prevDayBtn.onclick = ()=> shiftDay(-1);
     nextDayBtn.onclick = ()=> shiftDay(1);
@@ -1038,7 +1093,7 @@ function renderLogo(){
     gptSave.onclick = async ()=>{ gptUrl = (gptInput.value||"").trim(); await setSharedDoc('gptUrl', gptUrl); gptDialog.close(); };
 
     t_cancel.onclick = ()=> travelDialog.close();
-  t_save.onclick = async ()=>{
+t_save.onclick = async () => {
   const id = travelDialog.dataset.editId;
   const payload = {
     id: id || uid(),
@@ -1049,12 +1104,19 @@ function renderLogo(){
   };
   if (t_start.value) payload.startISO = new Date(t_start.value).toISOString();
   if (t_end.value)   payload.endISO   = new Date(t_end.value).toISOString();
+  if (!payload.label){ alert("Label required"); return; }
 
-  if(!payload.label){ alert("Label required"); return; }
-  if(id){ travel = travel.map(x=> x.id===id? {...x, ...payload}: x); }
-  else { travel = [...travel, payload]; }
-  await setSharedDoc('travel', travel);
-  travelDialog.close();
+  if (payload.startISO && payload.endISO && new Date(payload.endISO) < new Date(payload.startISO)){
+    alert("Travel end must be after start."); return;
+  }
+
+  try {
+    await upsertTravel(payload);
+    travelDialog.close();
+  } catch(e){
+    console.error(e);
+    alert('Save failed.');
+  }
 };
 setLogoBtn.addEventListener('click', () => {
   logoInput.value = logoUrl || '';
@@ -1080,25 +1142,46 @@ logoSave.addEventListener('click', async () => {
 
     // INITIAL LOAD from Firestore + realtime subscriptions
     (async function init(){
-      // load once (or create docs if missing)
-      const meetingsVal = await getSharedDoc('meetings', SAMPLE_MEETINGS);
-      const travelVal   = await getSharedDoc('travel',   SAMPLE_TRAVEL);
-      const gptVal      = await getSharedDoc('gptUrl',   "");
-        const logoVal     = await getSharedDoc('logoUrl',   "");
+  // One-time simple settings
+  gptUrl  = (await getSharedDoc('gptUrl',  "")) || "";
+  logoUrl = (await getSharedDoc('logoUrl', "")) || "";
+  renderGpt(); renderLogo();
 
-      meetings = meetingsVal || [];
-      travel   = travelVal   || [];
-      gptUrl   = gptVal      || "";
- logoUrl  = logoVal     || ""; 
-      renderAll();
+  // Live settings
+  onSharedDoc('gptUrl',  v => { gptUrl  = v || ""; renderGpt(); });
+  onSharedDoc('logoUrl', v => { logoUrl = v || ""; renderLogo(); });
 
-      // realtime listeners
-      onSharedDoc('meetings', v => { meetings = v || []; renderAll(); });
-      onSharedDoc('travel',   v => { travel   = v || []; renderAll(); });
-      onSharedDoc('gptUrl',   v => { gptUrl   = v || ""; renderAll(); });
-       onSharedDoc('logoUrl',  v => { logoUrl  = v || ""; renderLogo(); }); 
-    })();
-  })();
+  // Realtime meetings (subcollection)
+  MEETINGS.orderBy('startISO').onSnapshot(async snap => {
+    if (snap.empty) {
+      // Optional seed once on first run
+      const batch = db.batch();
+      SAMPLE_MEETINGS.forEach(m => batch.set(MEETINGS.doc(m.id), m));
+      await batch.commit();
+      return;
+    }
+    meetings = snap.docs.map(d => d.data());
+    if (!meetings.find(m => sameDay(m.startISO, activeDate)) && meetings.length){
+      activeDate = meetings[0].startISO;
+    }
+    renderAll();
+  });
+
+  // Realtime travel (subcollection)
+  TRAVEL.orderBy('startISO').onSnapshot(async snap => {
+    if (snap.empty) {
+      const batch = db.batch();
+      SAMPLE_TRAVEL.forEach(t => batch.set(TRAVEL.doc(t.id), t));
+      await batch.commit();
+      return;
+    }
+    travel = snap.docs.map(d => d.data());
+    renderTravel();
+  });
+
+  renderAll(); // first paint
+})();
+
   </script>
 </body>
 </html>
