@@ -275,6 +275,7 @@ header .muted { color:rgba(255,255,255,.85); }
       <!-- Logo replaces the emoji -->
       <img id="brandLogo" class="brand-logo hidden" alt="Company logo" />
         <button id="setLogoBtn" class="btn sm" type="button">🖼️ Set logo</button>
+      <input id="logoFile" type="file" accept="image/*" class="hidden" />
   Tradeshow Meetings Assistant
   <span class="muted" style="font-weight:400">— realtime</span>
 </h1>
@@ -523,7 +524,7 @@ const logoDialog = $("#logoDialog");
 const logoInput  = $("#logoInput");
 const logoSave   = $("#logoSave");
 const logoCancel = $("#logoCancel");
-
+const logoFile  = $("#logoFile");
 
     // dialogs
     const meetingDialog = $("#meetingDialog");
@@ -1006,15 +1007,31 @@ async function saveMeetingFromDialog(){
       }
     }
 function renderLogo(){
-  if (logoUrl) {
-    brandLogo.src = logoUrl;
-    brandLogo.classList.remove("hidden");
-  } else {
-    brandLogo.removeAttribute("src");
-    brandLogo.classList.add("hidden");
+  // If there's no saved URL: hide image, show the button, and bail.
+  if (!logoUrl) {
+    brandLogo.removeAttribute('src');
+    brandLogo.classList.add('hidden');
+    setLogoBtn.classList.remove('hidden');
+    return;
   }
-    if (setLogoBtn) setLogoBtn.classList.toggle("hidden", !!logoUrl);
- }
+
+  // Verify the URL loads before we hide the button.
+  const probe = new Image();
+  probe.onload = () => {
+    brandLogo.src = logoUrl;
+    brandLogo.classList.remove('hidden');
+    setLogoBtn.classList.add('hidden');  // hide only after a successful load
+  };
+  probe.onerror = async () => {
+    // Bad URL: clear it so the button comes back.
+    brandLogo.removeAttribute('src');
+    brandLogo.classList.add('hidden');
+    setLogoBtn.classList.remove('hidden');
+    logoUrl = '';
+    await setSharedDoc('logoUrl', '');
+  };
+  probe.src = logoUrl;
+}
 
 async function renderImportExport(){
   const root = document.createElement("div");
@@ -1119,15 +1136,64 @@ t_save.onclick = async () => {
   }
 };
 setLogoBtn.addEventListener('click', () => {
-  logoInput.value = logoUrl || '';
-  logoDialog.showModal();
+  logoFile.click();
 });
-logoCancel.addEventListener('click', () => logoDialog.close());
-logoSave.addEventListener('click', async () => {
-  logoUrl = (logoInput.value || '').trim();
-  await setSharedDoc('logoUrl', logoUrl);
-  logoDialog.close();
+
+// When a file is chosen, read/resize to data URL and save to Firestore
+logoFile.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const dataUrl = await fileToDataUrl(file, {
+      maxW: 360,     // cap width so the data URL stays small
+      maxH: 120,     // header-height friendly
+      quality: 0.9   // jpeg quality if we encode to jpeg
+    });
+
+    await setSharedDoc('logoUrl', dataUrl); // triggers onSnapshot -> renderLogo()
+  } catch (err) {
+    console.error(err);
+    alert('Could not read that image. Try a PNG or JPG.');
+  } finally {
+    // Reset the input so picking the same file again still fires 'change'
+    logoFile.value = '';
+  }
 });
+
+// Utility: read & (optionally) resize the image to a data URL
+function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Image decode failed'));
+      img.onload = () => {
+        // Calculate target size
+        const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+        const w = Math.round(img.width * ratio);
+        const h = Math.round(img.height * ratio);
+
+        // Draw into a canvas (resize if needed)
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // Choose output format
+        const wantPng = file.type.includes('png') || file.type.includes('svg');
+        const mime = wantPng ? 'image/png' : 'image/jpeg';
+        const out = canvas.toDataURL(mime, quality);
+
+        resolve(out);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
     function renderAll(){
       renderHeaderControls();
       (view==="agenda"? (agendaList.classList.remove("hidden"), hourlyGrid.classList.add("hidden"), renderAgenda())
