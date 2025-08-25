@@ -73,6 +73,19 @@
 .ae-two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .ae-actions{display:flex;justify-content:flex-end;margin-top:8px}
     .ae-linkwrap{display:flex;gap:8px;align-items:center}
+    .meeting-pill { /* existing */ }
+.item.session{
+  border-left: 4px solid var(--session-accent);
+  background: #fff;}
+.item.session .title{ color: var(--session-accent); }
+
+/* Hourly pills: colored outline + subtle fill of the same hue (not pale gray) */
+.meeting-pill.session{
+  border: 1px solid var(--session-accent);
+  background: var(--session-accent);
+  color:#fff;
+}
+.meeting-pill.session .muted{ color: rgba(255,255,255,.8); }
     /* === Blue background + interactive polish === */
 :root{
   --bg:#1d4ed8;          /* page background */
@@ -81,6 +94,7 @@
   --primary-50:#eff6ff;  /* pale blue for subtle fills */
   --blue:#1d4ed8;
   --shadow-hover:0 6px 12px rgba(0,0,0,.18);
+ --session-accent: #7c3aed;   
 }
 
 /* Make header text readable on blue */
@@ -438,14 +452,33 @@ header .muted { color:rgba(255,255,255,.85); }
     const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
     const uid = () => Math.random().toString(36).slice(2,9);
-    const fmtTime = (iso) => new Date(iso).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
-    const fmtDate = (iso) => new Date(iso).toLocaleDateString([], {year:"numeric", month:"short", day:"2-digit"});
-    const sameDay = (aISO, bISO) => {
-      const a = new Date(aISO), b = new Date(bISO);
-      return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
-    };
-    const hoursBetween = (startISO, endISO) =>
-      (new Date(endISO).getTime() - new Date(startISO).getTime())/(1000*60*60);
+    const TZ = 'America/Los_Angeles';  
+   const fmtTime = (iso) =>
+  new Date(iso).toLocaleTimeString([], {
+    hour: "2-digit", minute: "2-digit", timeZone: TZ
+  });
+
+const fmtDate = (iso) =>
+  new Date(iso).toLocaleDateString([], {
+    year: "numeric", month: "short", day: "2-digit", timeZone: TZ
+  });
+  
+    const ptMinutes = (iso) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ, hour:'2-digit', minute:'2-digit', hour12:false
+  }).formatToParts(new Date(iso));
+  const h = +parts.find(p=>p.type==='hour').value;
+  const m = +parts.find(p=>p.type==='minute').value;
+  return h*60 + m;
+};
+   const sameDay = (aISO, bISO) => {
+  const parts = iso => new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
+  }).formatToParts(new Date(iso))
+    .reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
+  const A = parts(aISO), B = parts(bISO);
+  return A.year===B.year && A.month===B.month && A.day===B.day;
+};
 
     // seed
     const seedDate = (()=>{
@@ -699,74 +732,108 @@ function collectAttendeesFromEditor(){
     const t_save = $("#t_save");
     const t_cancel = $("#t_cancel");
 
-    function daysFromMeetings(list){
-      const unique = Array.from(new Set(list.map(m => new Date(m.startISO).toDateString())));
-      return unique.map(d => new Date(d)).sort((a,b)=>a.getTime()-b.getTime());
-    }
+ function daysFromMeetings(list){
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
+  });
+  const byDay = new Map(); // key = 'YYYY-MM-DD' in PT -> earliest ISO on that day
+  list.forEach(m => {
+    const k = fmt.format(new Date(m.startISO));
+    const cur = byDay.get(k);
+    if (!cur || new Date(m.startISO) < new Date(cur)) byDay.set(k, m.startISO);
+  });
+  return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b)); // ISO strings
+}
     function shiftDay(dir){
-      const days = daysFromMeetings(meetings);
-      const idx = days.findIndex(d => sameDay(d.toISOString(), activeDate));
-      const next = days[idx+dir];
-      if(next) activeDate = next.toISOString();
-      renderAll();
-    }
+  const days = daysFromMeetings(meetings);
+  const idx = days.findIndex(d => sameDay(d, activeDate)); // both ISO strings
+  const next = days[idx + dir];
+  if (next) activeDate = next;
+  renderAll();
+}
     function renderHeaderControls(){
       activeDateLbl.textContent = fmtDate(activeDate);
       tabAgenda.classList.toggle("active", view==="agenda");
       tabHourly.classList.toggle("active", view==="hourly");
     }
+const SESSIONS = COL.doc('sessions').collection('items');
 
-    function renderAgenda(){
- 
- agendaList.innerHTML = "";
-  const dayMeetings = meetings
-    .filter(m => sameDay(m.startISO, activeDate))
-    .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
+// Helpers
+function upsertSession(s){
+  const id = s.id || uid();
+  return SESSIONS.doc(id).set({ ...s, id }, { merge:true });
+}
+function deleteSession(id){ return SESSIONS.doc(id).delete(); }
 
-  if(dayMeetings.length===0){
+// State
+let sessions = [];
+    SESSIONS.orderBy('startISO').onSnapshot(async snap => {
+  sessions = snap.docs.map(d => d.data());
+  renderAll();                    // so the list/grid picks them up
+});
+  function itemsForDay(iso){
+  const m = meetings
+    .filter(x => sameDay(x.startISO, iso))
+    .map(x => ({ ...x, kind: 'meeting' }));
+
+  const s = sessions
+    .filter(x => sameDay(x.startISO, iso))
+    .map(x => ({ ...x, kind: 'session' }));
+
+  return [...m, ...s].sort((a,b)=> new Date(a.startISO) - new Date(b.startISO));
+}
+   function renderAgenda(){
+  agendaList.innerHTML = "";
+  const items = itemsForDay(activeDate);
+  if(items.length === 0){
     const div = document.createElement("div");
     div.className = "muted";
-    div.textContent = "No meetings for this date.";
+    div.textContent = "No items for this date.";
     agendaList.append(div);
     return;
   }
 
-  dayMeetings.forEach(m => {
+  items.forEach(it => {
     const card = document.createElement("div");
     card.className = "item";
-
+if (it.kind === 'session') card.classList.add('session'); 
     const c = document.createElement("div");
     c.className = "item-c";
 
     const left = document.createElement("div");
-
     const title = document.createElement("div");
     title.className = "title";
-    title.textContent = `${fmtTime(m.startISO)}–${fmtTime(m.endISO)} • ${m.title}`;
+    title.textContent = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)} • ${it.title}`;
 
     const sub = document.createElement("div");
     sub.className = "sub";
-    sub.textContent = `${m.location||""}${m.booth? ` • Booth ${m.booth}`:""}`;
+    sub.textContent = `${it.location || it.stage || ""}${it.booth ? ` • Booth ${it.booth}` : ""}`;
     left.append(title, sub);
 
     const tools = document.createElement("div");
     tools.className = "tools";
 
-    const edit = document.createElement("button");
-    edit.className = "btn sm";
-    edit.textContent = "✏️";
-    edit.onclick = () => openMeetingDialog(m);
+    if (it.kind === 'meeting') {
+      const edit = document.createElement("button");
+      edit.className = "btn sm"; edit.textContent = "✏️";
+      edit.onclick = () => openMeetingDialog(it);
 
-    const del = document.createElement("button");
-    del.className = "btn sm";
-    del.textContent = "🗑️";
-    del.onclick = async () => {
-      if (!confirm("Delete this meeting?")) return;
-      try { await deleteMeeting(m.id); }
-      catch(e){ console.error(e); alert("Delete failed."); }
-    };
+      const del = document.createElement("button");
+      del.className = "btn sm"; del.textContent = "🗑️";
+      del.onclick = async () => {
+        if (!confirm("Delete this meeting?")) return;
+        try { await deleteMeeting(it.id); } catch(e){ console.error(e); alert("Delete failed."); }
+      };
 
-    tools.append(edit, del);
+      tools.append(edit, del);
+    } else {
+      // Optional: small “SESSION” chip for visibility
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = "SESSION";
+      tools.append(chip);
+      // (No edit/delete, and no right-side details card)
+    }
 
     c.append(left, tools);
     card.append(c);
@@ -774,46 +841,63 @@ function collectAttendeesFromEditor(){
   });
 }
 
-    function renderHourly(){
-      hourlyGrid.innerHTML = "";
-      const dayMeetings = meetings
-        .filter(m => sameDay(m.startISO, activeDate))
-        .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
+function renderHourly(){
+  hourlyGrid.innerHTML = "";
+  const items = itemsForDay(activeDate);       // uses sameDay() in PT already
 
-      const wrap = document.createElement("div");
-      wrap.className = "hour-grid";
-      const start = new Date(activeDate); start.setHours(7,0,0,0);
-      for(let i=0;i<13;i++){
-        const h = new Date(start.getTime()+i*60*60*1000);
-        const row = document.createElement("div");
-        row.className = "hour-row";
-        const lbl = document.createElement("div");
-        lbl.className = "hour-label";
-        lbl.textContent = h.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
-        const cell = document.createElement("div");
-        cell.className = "hour-cell";
-        const slot = dayMeetings.filter(m => new Date(m.startISO)<=h && new Date(m.endISO)>h);
-        if(slot.length===0){
-          const g = document.createElement("div");
-          g.className = "ghost";
-          cell.append(g);
-        }else{
-          const box = document.createElement("div");
-          box.style.display="flex"; box.style.flexWrap="wrap"; box.style.gap="8px";
-          slot.forEach(m => {
-            const pill = document.createElement("span");
-            pill.className = "meeting-pill";
-            pill.innerHTML = `<strong>${m.title}</strong> <span class="muted">${fmtTime(m.startISO)}–${fmtTime(m.endISO)}</span>`;
-            box.append(pill);
-          });
-          cell.append(box);
-        }
-        row.append(lbl, cell);
-        wrap.append(row);
-      }
-      hourlyGrid.append(wrap);
+  const wrap = document.createElement("div");
+  wrap.className = "hour-grid";
+
+  const startHour = 7;        // 7 AM PT
+  const hoursToShow = 13;     // 7am–8pm PT
+
+  for (let i = 0; i < hoursToShow; i++){
+    const hr = startHour + i;
+    const row = document.createElement("div");
+    row.className = "hour-row";
+
+    // Label strictly in PT
+    const lbl = document.createElement("div");
+    lbl.className = "hour-label";
+    lbl.textContent = new Date(Date.UTC(2000,0,1,hr,0,0))
+      .toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", timeZone: TZ });
+
+    const cell = document.createElement("div");
+    cell.className = "hour-cell";
+
+    const hourStartMin = hr * 60;
+    const hourEndMin   = hourStartMin + 60;
+
+    // Decide if an item occupies this PT hour slot
+    const slot = items.filter(it => {
+      const s = ptMinutes(it.startISO);
+      const e = ptMinutes(it.endISO);
+      return s < hourEndMin && e > hourStartMin;  // overlap test in PT
+    });
+
+    if (slot.length === 0){
+      const g = document.createElement("div");
+      g.className = "ghost";
+      cell.append(g);
+    } else {
+      const box = document.createElement("div");
+      box.style.display="flex"; box.style.flexWrap="wrap"; box.style.gap="8px";
+      slot.forEach(it => {
+        const pill = document.createElement("span");
+        pill.className = "meeting-pill";
+        if (it.kind === 'session') pill.classList.add('session'); // keeps your purple style
+        pill.innerHTML = `<strong>${it.title}</strong> <span class="muted">${fmtTime(it.startISO)}–${fmtTime(it.endISO)}</span>`;
+        box.append(pill);
+      });
+      cell.append(box);
     }
 
+    row.append(lbl, cell);
+    wrap.append(row);
+  }
+
+  hourlyGrid.append(wrap);
+}
     function renderDetails(){
       detailsCol.innerHTML = "";
       const dayMeetings = meetings
@@ -1038,13 +1122,21 @@ async function renderImportExport(){
   const inp = document.createElement("input");
   inp.type = "file"; inp.accept = "application/json"; inp.className = "hidden";
 
-  const btnImport = document.createElement("button"); btnImport.className = "btn sm"; btnImport.textContent = "⬆️ Import";
-  const btnExport = document.createElement("button"); btnExport.className = "btn sm"; btnExport.textContent = "⬇️ Export";
+  const btnImport = document.createElement("button"); 
+  btnImport.className = "btn sm"; 
+  btnImport.textContent = "⬆️ Import";
+
+  const btnExport = document.createElement("button"); 
+  btnExport.className = "btn sm"; 
+  btnExport.textContent = "⬇️ Export";
 
   btnImport.onclick = () => inp.click();
+
+  // IMPORT
   inp.onchange = async (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    try{
+    const f = e.target.files?.[0]; 
+    if (!f) return;
+    try {
       const parsed = JSON.parse(await f.text());
 
       // Replace ALL meetings
@@ -1056,7 +1148,6 @@ async function renderImportExport(){
         batch.set(MEETINGS.doc(id), { ...m, id });
       });
       await batch.commit();
-      
 
       // Replace ALL travel
       const ts = await TRAVEL.get();
@@ -1068,19 +1159,39 @@ async function renderImportExport(){
       });
       await batch.commit();
 
+      // Replace ALL sessions (NEW)
+      if (Array.isArray(parsed.sessions)) {
+        const ss = await SESSIONS.get();
+        batch = db.batch();
+        ss.forEach(doc => batch.delete(doc.ref));
+        (parsed.sessions || []).forEach(s => {
+          const id = s.id || uid();
+          batch.set(SESSIONS.doc(id), { ...s, id });
+        });
+        await batch.commit();
+      }
+
       if ('gptUrl' in parsed)  await setSharedDoc('gptUrl',  parsed.gptUrl  || '');
       if ('logoUrl' in parsed) await setSharedDoc('logoUrl', parsed.logoUrl || '');
-    }catch(err){
+    } catch(err){
       console.error(err);
       alert("Invalid JSON file");
+    } finally {
+      inp.value = '';
     }
   };
 
+  // EXPORT
   btnExport.onclick = async () => {
-    const [msSnap, tsSnap] = await Promise.all([MEETINGS.get(), TRAVEL.get()]);
+    const [msSnap, tsSnap, ssSnap] = await Promise.all([
+      MEETINGS.get(),
+      TRAVEL.get(),
+      SESSIONS.get()
+    ]);
     const file = {
       meetings: msSnap.docs.map(d => d.data()),
       travel:   tsSnap.docs.map(d => d.data()),
+      sessions: ssSnap.docs.map(d => d.data()),
       gptUrl,
       logoUrl
     };
