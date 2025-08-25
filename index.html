@@ -989,7 +989,9 @@ function renderHourly(){
         travelDialog.dataset.editId = ""; travelDialog.showModal();
       };
       root.append(add);
-      root.append(document.createElement("div")).className="spacer";
+      const spacer = document.createElement("div");
+spacer.className = "spacer";
+root.append(spacer);
 
       if(travel.length===0){
         const div = document.createElement("div"); div.className="muted"; div.textContent="No travel saved.";
