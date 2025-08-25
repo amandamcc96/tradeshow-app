@@ -309,8 +309,8 @@ header .tools .btn {
       <img id="brandLogo" class="brand-logo hidden" alt="Company logo" />
         <button id="setLogoBtn" class="btn sm" type="button">🖼️ Set logo</button>
       <input id="logoFile" type="file" accept="image/*" class="hidden" />
-  Tradeshow Meetings Assistant
-  <span class="muted" style="font-weight:400">— realtime</span>
+  Your Inbound 2025 Assistant
+  <span class="muted" style="font-weight:400"></span>
 </h1>
       
   </div>
@@ -803,10 +803,24 @@ function deleteSession(id){ return SESSIONS.doc(id).delete(); }
 
 // State
 let sessions = [];
-    SESSIONS.orderBy('startISO').onSnapshot(async snap => {
-  sessions = snap.docs.map(d => d.data());
-  renderAll();                    // so the list/grid picks them up
-});
+
+try {
+  SESSIONS.orderBy('startISO').onSnapshot(
+    snap => {
+      sessions = snap.docs.map(d => d.data());
+      renderAll(); // update agenda/hourly with sessions if any
+    },
+    err => {
+      console.warn('SESSIONS listener error:', err);
+      sessions = []; // keep UI alive even if Firestore blocks
+      renderAll();
+    }
+  );
+} catch (e) {
+  console.warn('SESSIONS subscribe failed:', e);
+  sessions = [];
+  renderAll();
+}
   function itemsForDay(iso){
   const m = meetings
     .filter(x => sameDay(x.startISO, iso))
@@ -1072,6 +1086,8 @@ t_end.value   = t.endISO   ? isoToInputInTZ(t.endISO,   TZ) : "";
   meetingDialog.dataset.editId = m?.id || "";
   dlgTitle.textContent = m ? "Edit meeting" : "New meeting";
   m_title.value = m?.title || "";
+    m_location.value = m?.location || "";
+m_booth.value    = m?.booth || "";
     m_desc.value = m?.description || ""; 
  
 
@@ -1349,28 +1365,32 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
       renderTravel();
       renderGpt();
         renderLogo();  
-      renderImportExport();
+      
       
     }
-
+renderAll(); 
     // INITIAL LOAD from Firestore + realtime subscriptions
     (async function init(){
   // One-time simple settings
   gptUrl  = (await getSharedDoc('gptUrl',  "")) || "";
   logoUrl = (await getSharedDoc('logoUrl', "")) || "";
   renderGpt(); renderLogo();
-
+  renderImportExport();
   // Live settings
   onSharedDoc('gptUrl',  v => { gptUrl  = v || ""; renderGpt(); });
   onSharedDoc('logoUrl', v => { logoUrl = v || ""; renderLogo(); });
 
   // Realtime meetings (subcollection)
-  MEETINGS.orderBy('startISO').onSnapshot(async snap => {
+MEETINGS.orderBy('startISO').onSnapshot(
+  async snap => {
     if (snap.empty) {
-      // Optional seed once on first run
-      const batch = db.batch();
-      SAMPLE_MEETINGS.forEach(m => batch.set(MEETINGS.doc(m.id), m));
-      await batch.commit();
+      try {
+        const batch = db.batch();
+        SAMPLE_MEETINGS.forEach(m => batch.set(MEETINGS.doc(m.id), m));
+        await batch.commit();
+      } catch (e) {
+        console.warn('Seeding meetings failed:', e);
+      }
       return;
     }
     meetings = snap.docs.map(d => d.data());
@@ -1378,19 +1398,27 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
       activeDate = meetings[0].startISO;
     }
     renderAll();
-  });
+  },
+  err => { console.warn('MEETINGS listener error:', err); renderAll(); }
+);
 
-  // Realtime travel (subcollection)
-  TRAVEL.orderBy('startISO').onSnapshot(async snap => {
+TRAVEL.orderBy('startISO').onSnapshot(
+  async snap => {
     if (snap.empty) {
-      const batch = db.batch();
-      SAMPLE_TRAVEL.forEach(t => batch.set(TRAVEL.doc(t.id), t));
-      await batch.commit();
+      try {
+        const batch = db.batch();
+        SAMPLE_TRAVEL.forEach(t => batch.set(TRAVEL.doc(t.id), t));
+        await batch.commit();
+      } catch (e) {
+        console.warn('Seeding travel failed:', e);
+      }
       return;
     }
     travel = snap.docs.map(d => d.data());
     renderTravel();
-  });
+  },
+  err => { console.warn('TRAVEL listener error:', err); renderTravel(); }
+);
 
   renderAll(); // first paint
 })();
