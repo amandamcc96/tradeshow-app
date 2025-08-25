@@ -171,7 +171,6 @@ header .tools .btn {
   background:#fff;
   border-color: var(--border);
 }
-}
 /* Optional: nicer hover for primary buttons & active tabs */
 .btn.primary:hover{
   background:var(--primary-hover);
@@ -467,7 +466,8 @@ const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString([], {
     year: "numeric", month: "short", day: "2-digit", timeZone: TZ
   });
-  
+  const hoursBetween = (startISO, endISO) =>
+  (new Date(endISO).getTime() - new Date(startISO).getTime()) / (1000 * 60 * 60);
     const ptMinutes = (iso) => {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: TZ, hour:'2-digit', minute:'2-digit', hour12:false
