@@ -1376,6 +1376,7 @@ renderAll();
   logoUrl = (await getSharedDoc('logoUrl', "")) || "";
   renderGpt(); renderLogo();
   renderImportExport();
+      
   // Live settings
   onSharedDoc('gptUrl',  v => { gptUrl  = v || ""; renderGpt(); });
   onSharedDoc('logoUrl', v => { logoUrl = v || ""; renderLogo(); });
