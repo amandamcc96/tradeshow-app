@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tradeshow Meetings Assistant — Realtime</title>
+  <title> Your Inbound 2025 Assistant</title>
   <style>
     :root{
       --bg:#f6f7f8;
@@ -95,6 +95,21 @@
   --blue:#1d4ed8;
   --shadow-hover:0 6px 12px rgba(0,0,0,.18);
  --session-accent: #7c3aed;   
+    --meeting-accent:#f59e0b; /* light orange */
+  --meeting-bg:#fff7ed;     /* very light orange fill */
+}
+
+/* Agenda cards */
+.item.meeting{
+  border-left:4px solid var(--meeting-accent);
+  background:#fff;
+}
+.item.meeting .title{ color:var(--meeting-accent); }
+
+/* Hourly pills */
+.meeting-pill.meeting{
+  border:1px solid var(--meeting-accent);
+  background:var(--meeting-bg);
 }
 
 /* Make header text readable on blue */
@@ -363,23 +378,6 @@ header .tools .btn {
       <div class="col gap16" id="detailsCol"></div>
     </div>
   </div>
-
-  <!-- Dialogs -->
-  <dialog id="logoDialog">
-  <div class="dialog-c">
-    <h3 style="margin:0 0 8px 0">Set logo URL</h3>
-    <div class="col gap12">
-      <input id="logoInput" placeholder="https://example.com/logo.png" />
-      <div class="muted" style="font-size:12px">
-        Tip: use a transparent PNG or SVG if you have one.
-      </div>
-    </div>
-  </div>
-  <div class="dialog-actions">
-    <button class="btn" id="logoCancel">Cancel</button>
-    <button class="btn primary" id="logoSave">Save</button>
-  </div>
-</dialog>
 <dialog id="meetingDialog">
   <div class="dialog-c">
     <h3 id="dlgTitle" style="margin:0 0 8px 0">New meeting</h3>
@@ -484,7 +482,42 @@ const fmtDate = (iso) =>
   const A = parts(aISO), B = parts(bISO);
   return A.year===B.year && A.month===B.month && A.day===B.day;
 };
+function isoToInputInTZ(iso, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone, hour12:false,
+    year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit'
+  }).formatToParts(new Date(iso))
+    .reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
 
+function wallToIsoInTZ(inputStr, timeZone) {
+  const [y,m,dH] = inputStr.split('-');
+  const [d, hm]  = dH.split('T');
+  const [H, M]   = hm.split(':');
+  let utcMs = Date.UTC(+y, +m-1, +d, +H, +M, 0);
+
+  const offsetAt = (ms) => {
+    const date = new Date(ms);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone, hour12:false,
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'
+    }).formatToParts(date)
+      .reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
+    const asUTC = Date.UTC(+parts.year, +parts.month-1, +parts.day,
+                           +parts.hour, +parts.minute, +parts.second);
+    return (asUTC - date.getTime()) / 60000; // minutes
+  };
+
+  const off1 = offsetAt(utcMs);
+  utcMs -= off1 * 60000;
+  const off2 = offsetAt(utcMs);
+  if (off2 !== off1) utcMs -= (off2 - off1) * 60000;
+
+  return new Date(utcMs).toISOString();
+}
     // seed
     const seedDate = (()=>{
       const now = new Date();
@@ -558,10 +591,7 @@ let logoUrl = "";
     const travelSection = $("#travelSection");
     const brandLogo  = $("#brandLogo");
 const setLogoBtn = $("#setLogoBtn");
-const logoDialog = $("#logoDialog");
-const logoInput  = $("#logoInput");
-const logoSave   = $("#logoSave");
-const logoCancel = $("#logoCancel");
+
 const logoFile  = $("#logoFile");
 
     // dialogs
@@ -599,27 +629,28 @@ function buildAttendeeRow(a){
   const grid = document.createElement("div");
   grid.className = "ae-grid";
 
-  // Avatar / preview
+  // Avatar
   const avatar = document.createElement("div");
   avatar.className = "ae-avatar";
-  const initial = (a.name || "?").slice(0,1).toUpperCase();
   if (a.photoUrl) {
     const img = document.createElement("img");
     img.src = a.photoUrl;
     avatar.append(img);
   } else {
-    avatar.textContent = initial;
+    avatar.textContent = (a.name || "?").slice(0,1).toUpperCase();
   }
 
-  // Right side fields
-  const right = document.createElement("div"); right.className = "col gap8";
+  // Right side
+  const right = document.createElement("div");
+  right.className = "col gap8";
 
-  // name + title
+  // Row 1: name + title
   const row1 = document.createElement("div"); row1.className = "ae-two";
-  const inName = document.createElement("input"); inName.placeholder = "Full name"; inName.value = a.name || "";
+  const inName  = document.createElement("input"); inName.placeholder  = "Full name"; inName.value  = a.name  || "";
   const inTitle = document.createElement("input"); inTitle.placeholder = "Job title"; inTitle.value = a.title || "";
+  row1.append(inName, inTitle);
 
-  // company + linkedin (with 'Open' button)
+  // Row 2: company + LinkedIn
   const row2 = document.createElement("div"); row2.className = "ae-two";
   const inCompany = document.createElement("input"); inCompany.placeholder = "Company"; inCompany.value = a.company || "";
 
@@ -627,65 +658,68 @@ function buildAttendeeRow(a){
   const inLinkedin = document.createElement("input");
   inLinkedin.placeholder = "LinkedIn URL (https://…)";
   inLinkedin.value = a.linkedin || "";
-
   const btnOpen = document.createElement("button");
-  btnOpen.className = "btn sm";
-  btnOpen.type = "button";
-  btnOpen.textContent = "🔗 Open";
+  btnOpen.className = "btn sm"; btnOpen.type = "button"; btnOpen.textContent = "🔗 Open";
   btnOpen.disabled = !inLinkedin.value.trim();
-
   btnOpen.onclick = () => {
     const url = sanitizeUrl(inLinkedin.value);
-    if(!url){ return; }
-    window.open(url, "_blank", "noopener,noreferrer");
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
   };
-  inLinkedin.addEventListener("input", () => {
-    btnOpen.disabled = !inLinkedin.value.trim();
-  });
-
+  inLinkedin.addEventListener("input", () => { btnOpen.disabled = !inLinkedin.value.trim(); });
   linkWrap.append(inLinkedin, btnOpen);
+  row2.append(inCompany, linkWrap);
 
-  // photo url (updates preview live)
+  // Photo URL + Upload
   const inPhoto = document.createElement("input");
-  inPhoto.placeholder = "Photo URL (optional)";
+  inPhoto.placeholder = "Photo URL or data URL";
   inPhoto.value = a.photoUrl || "";
 
-  // notes
+  const upBtn = document.createElement("button");
+  upBtn.className = "btn sm"; upBtn.type = "button"; upBtn.textContent = "📷 Upload";
+
+  const inFile = document.createElement("input");
+  inFile.type = "file"; inFile.accept = "image/*"; inFile.className = "hidden";
+
+  upBtn.onclick = () => inFile.click();
+  inFile.onchange = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    try {
+      const dataUrl = await fileToDataUrl(file, { maxW:256, maxH:256, quality:0.9 });
+      inPhoto.value = dataUrl; a.photoUrl = dataUrl;
+      avatar.innerHTML = ""; const img2 = document.createElement("img"); img2.src = dataUrl; avatar.append(img2);
+    } catch (err) { console.error(err); alert("Could not read that image. Try a PNG or JPG."); }
+    finally { inFile.value = ""; }
+  };
+
+  inPhoto.addEventListener("input", () => {
+    a.photoUrl = inPhoto.value.trim();
+    avatar.innerHTML = "";
+    if (a.photoUrl){
+      const img2 = document.createElement("img"); img2.src = a.photoUrl; avatar.append(img2);
+    } else {
+      avatar.textContent = (inName.value || "?").slice(0,1).toUpperCase();
+    }
+  });
+
+  const photoWrap = document.createElement("div");
+  photoWrap.className = "ae-linkwrap";
+  photoWrap.append(inPhoto, upBtn, inFile);
+
+  // Notes
   const inNotes = document.createElement("textarea");
   inNotes.placeholder = "Notes";
   inNotes.value = a.notes || "";
 
-  // remove button
+  // Remove
   const actions = document.createElement("div"); actions.className = "ae-actions";
   const btnRemove = document.createElement("button"); btnRemove.className = "btn sm"; btnRemove.textContent = "🗑️ Remove";
   btnRemove.onclick = () => {
     currentAttendees = currentAttendees.filter(x => x.id !== a.id);
     renderAttendeeEditor(currentAttendees);
   };
-
-  // live preview update for photo/name
-  inPhoto.addEventListener("input", () => {
-    a.photoUrl = inPhoto.value.trim();
-    avatar.innerHTML = "";
-    if (a.photoUrl){
-      const img2 = document.createElement("img");
-      img2.src = a.photoUrl;
-      avatar.append(img2);
-    } else {
-      avatar.textContent = (inName.value || "?").slice(0,1).toUpperCase();
-    }
-  });
-  inName.addEventListener("input", () => {
-    if (!inPhoto.value.trim()){
-      avatar.textContent = (inName.value || "?").slice(0,1).toUpperCase();
-    }
-  });
-
-  row1.append(inName, inTitle);
-  row2.append(inCompany, linkWrap);
-  right.append(row1, row2, inPhoto, inNotes);
   actions.append(btnRemove);
 
+  right.append(row1, row2, photoWrap, inNotes);
   grid.append(avatar, right);
   wrap.append(grid, actions);
   return wrap;
@@ -706,18 +740,15 @@ function renderAttendeeEditor(list){
 function collectAttendeesFromEditor(){
   const rows = Array.from(attendeeEditorRoot.querySelectorAll(".ae"));
   return rows.map(row => {
-    const id = row.dataset.id;
-    const inputs = row.querySelectorAll("input, textarea");
-    // Order: name, title, company, linkedin, photoUrl, notes (as built above)
-    const [inName, inTitle, inCompany, inLinkedin, inPhoto, inNotes] = inputs;
+    const q = (sel) => row.querySelector(sel);
     return {
-      id,
-      name: (inName.value || "").trim(),
-      title: (inTitle.value || "").trim(),
-      company: (inCompany.value || "").trim(),
-      linkedin: (inLinkedin.value || "").trim(),
-      photoUrl: (inPhoto.value || "").trim(),
-      notes: (inNotes.value || "").trim(),
+      id: row.dataset.id,
+      name:      (q('input[placeholder="Full name"]')?.value || "").trim(),
+      title:     (q('input[placeholder="Job title"]')?.value || "").trim(),
+      company:   (q('input[placeholder="Company"]')?.value || "").trim(),
+      linkedin:  (q('input[placeholder^="LinkedIn URL"]')?.value || "").trim(),
+      photoUrl:  (q('input[placeholder^="Photo URL"]')?.value || "").trim(),
+      notes:     (q('textarea[placeholder="Notes"]')?.value || "").trim(),
     };
   });
 }
@@ -787,7 +818,7 @@ let sessions = [];
 
   return [...m, ...s].sort((a,b)=> new Date(a.startISO) - new Date(b.startISO));
 }
-   function renderAgenda(){
+ function renderAgenda(){
   agendaList.innerHTML = "";
   const items = itemsForDay(activeDate);
   if(items.length === 0){
@@ -801,18 +832,22 @@ let sessions = [];
   items.forEach(it => {
     const card = document.createElement("div");
     card.className = "item";
-if (it.kind === 'session') card.classList.add('session'); 
+    card.classList.add(it.kind); // 'meeting' or 'session'
+
     const c = document.createElement("div");
     c.className = "item-c";
 
     const left = document.createElement("div");
     const title = document.createElement("div");
     title.className = "title";
-    title.textContent = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)} • ${it.title}`;
+
+    const where = it.location || it.stage || it.room || "";
+    const main = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)} • ${it.title}`;
+    title.textContent = (it.kind === 'session' && where) ? `${main} — ${where}` : main;
 
     const sub = document.createElement("div");
     sub.className = "sub";
-    sub.textContent = `${it.location || it.stage || ""}${it.booth ? ` • Booth ${it.booth}` : ""}`;
+    sub.textContent = `${(it.kind==='meeting' ? (it.location||"") : "")}${it.booth ? ` • Booth ${it.booth}` : ""}`;
     left.append(title, sub);
 
     const tools = document.createElement("div");
@@ -832,12 +867,10 @@ if (it.kind === 'session') card.classList.add('session');
 
       tools.append(edit, del);
     } else {
-      // Optional: small “SESSION” chip for visibility
       const chip = document.createElement("span");
       chip.className = "chip";
       chip.textContent = "SESSION";
       tools.append(chip);
-      // (No edit/delete, and no right-side details card)
     }
 
     c.append(left, tools);
@@ -845,10 +878,9 @@ if (it.kind === 'session') card.classList.add('session');
     agendaList.append(card);
   });
 }
-
 function renderHourly(){
   hourlyGrid.innerHTML = "";
-  const items = itemsForDay(activeDate);       // uses sameDay() in PT already
+  const items = itemsForDay(activeDate);       // PT-aware list
 
   const wrap = document.createElement("div");
   wrap.className = "hour-grid";
@@ -858,14 +890,15 @@ function renderHourly(){
 
   for (let i = 0; i < hoursToShow; i++){
     const hr = startHour + i;
+
     const row = document.createElement("div");
     row.className = "hour-row";
 
-    // Label strictly in PT
+    // Label strictly in PT, no Date conversions
     const lbl = document.createElement("div");
     lbl.className = "hour-label";
-    lbl.textContent = new Date(Date.UTC(2000,0,1,hr,0,0))
-      .toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", timeZone: TZ });
+    const h12 = ((hr + 11) % 12) + 1;
+    lbl.textContent = `${h12}:00 ${hr >= 12 ? "PM" : "AM"}`;
 
     const cell = document.createElement("div");
     cell.className = "hour-cell";
@@ -873,11 +906,11 @@ function renderHourly(){
     const hourStartMin = hr * 60;
     const hourEndMin   = hourStartMin + 60;
 
-    // Decide if an item occupies this PT hour slot
+    // Use PT minutes for overlap
     const slot = items.filter(it => {
       const s = ptMinutes(it.startISO);
       const e = ptMinutes(it.endISO);
-      return s < hourEndMin && e > hourStartMin;  // overlap test in PT
+      return s < hourEndMin && e > hourStartMin;
     });
 
     if (slot.length === 0){
@@ -886,11 +919,14 @@ function renderHourly(){
       cell.append(g);
     } else {
       const box = document.createElement("div");
-      box.style.display="flex"; box.style.flexWrap="wrap"; box.style.gap="8px";
+      box.style.display="flex";
+      box.style.flexWrap="wrap";
+      box.style.gap="8px";
       slot.forEach(it => {
         const pill = document.createElement("span");
         pill.className = "meeting-pill";
-        if (it.kind === 'session') pill.classList.add('session'); // keeps your purple style
+        if (it.kind === 'session') pill.classList.add('session');
+        else pill.classList.add('meeting');
         pill.innerHTML = `<strong>${it.title}</strong> <span class="muted">${fmtTime(it.startISO)}–${fmtTime(it.endISO)}</span>`;
         box.append(pill);
       });
@@ -1015,8 +1051,8 @@ root.append(spacer);
         const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
         edit.onclick = ()=>{
           t_type.value=t.type; t_label.value=t.label; t_conf.value=t.confirmation||""; t_details.value=t.details||"";
-          t_start.value = t.startISO? new Date(t.startISO).toISOString().slice(0,16): "";
-          t_end.value = t.endISO? new Date(t.endISO).toISOString().slice(0,16): "";
+       t_start.value = t.startISO ? isoToInputInTZ(t.startISO, TZ) : "";
+t_end.value   = t.endISO   ? isoToInputInTZ(t.endISO,   TZ) : "";
           travelDialog.dataset.editId = t.id; travelDialog.showModal();
         };
         const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
@@ -1036,18 +1072,11 @@ root.append(spacer);
   meetingDialog.dataset.editId = m?.id || "";
   dlgTitle.textContent = m ? "Edit meeting" : "New meeting";
   m_title.value = m?.title || "";
-  m_location.value = m?.location || "";
-  m_booth.value = m?.booth || "";
+    m_desc.value = m?.description || ""; 
+ 
 
-  // Use local time for inputs
-  const toLocalInput = (d) => {
-    const dt = new Date(d);
-    dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
-    return dt.toISOString().slice(0,16);
-  };
-  m_start.value = toLocalInput(m ? m.startISO : new Date());
-  m_end.value   = toLocalInput(m ? m.endISO   : new Date(Date.now()+60*60*1000));
-  m_desc.value  = m?.description || "";
+ m_start.value = isoToInputInTZ(m ? m.startISO : new Date().toISOString(), TZ);
+  m_end.value   = isoToInputInTZ(m ? m.endISO   : new Date(Date.now()+60*60*1000).toISOString(), TZ);
 
   // Load attendees into editor
   currentAttendees = Array.isArray(m?.attendees) ? structuredClone(m.attendees) : [];
@@ -1068,8 +1097,8 @@ async function saveMeetingFromDialog(){
     title: m_title.value.trim(),
     location: m_location.value.trim(),
     booth: m_booth.value.trim(),
-    startISO: new Date(m_start.value).toISOString(),
-    endISO:   new Date(m_end.value).toISOString(),
+ startISO: wallToIsoInTZ(m_start.value, TZ),
+  endISO:   wallToIsoInTZ(m_end.value,   TZ),
     attendees: collectAttendeesFromEditor(),
     description: m_desc.value.trim(),
   };
@@ -1237,8 +1266,8 @@ t_save.onclick = async () => {
     confirmation: t_conf.value.trim(),
     details: t_details.value.trim(),
   };
-  if (t_start.value) payload.startISO = new Date(t_start.value).toISOString();
-  if (t_end.value)   payload.endISO   = new Date(t_end.value).toISOString();
+if (t_start.value) payload.startISO = wallToIsoInTZ(t_start.value, TZ);
+if (t_end.value)   payload.endISO   = wallToIsoInTZ(t_end.value,   TZ);
   if (!payload.label){ alert("Label required"); return; }
 
   if (payload.startISO && payload.endISO && new Date(payload.endISO) < new Date(payload.startISO)){
@@ -1364,7 +1393,6 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
   });
 
   renderAll(); // first paint
-})();
 })();
   </script>
 </body>
