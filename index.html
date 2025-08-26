@@ -223,20 +223,6 @@ header .tools .btn {
 }
 
 /* Make attendee box + photos bigger on mobile */
-@media (max-width: 640px){
-  .attendee{
-    padding:14px;
-    border-radius:14px;
-  }
-  .attendee .avatar{
-    width:64px;
-    height:64px;
-    font-size:18px;
-  }
-  .avatar-img{
-    width:64px;
-    height:64px;
-  }
 
   /* Editor dialog */
   .ae{ padding:12px; }
@@ -308,6 +294,34 @@ header .tools .btn {
   padding: 8px 14px;     /* more breathing room */
   font-size: 14px;       /* slightly larger text */
   border-radius: 12px;   /* a touch more rounded */
+}
+  .attendee .avatar,
+.attendee .avatar-img{
+  width:72px;
+  height:72px;
+}
+
+.attendee .name{
+  font-size:16px;
+  font-weight:700;
+  line-height:1.2;
+}
+
+.attendee .role{
+  font-size:14px;
+  color: var(--muted);
+}
+
+/* Mobile: even larger */
+@media (max-width: 640px){
+  .attendee{ padding:16px; }
+  .attendee .avatar,
+  .attendee .avatar-img{ width:88px; height:88px; }
+  .attendee .name{ font-size:18px; }
+  .attendee .role{ font-size:15px; }
+
+  /* keep the LinkedIn link aligned to the right of the bigger avatar */
+  .attendee .link{ margin-left:96px; }
 }
   </style>
 
@@ -1090,9 +1104,14 @@ av.append(img);
   av.textContent = (a.name || "?").slice(0,1).toUpperCase();
 }
           const meta = document.createElement("div");
-          const nm = document.createElement("div"); nm.style.fontWeight="600"; nm.textContent=a.name;
-          const sub = document.createElement("div"); sub.className="muted"; sub.style.fontSize="12px";
-          sub.textContent=[a.title,a.company].filter(Boolean).join(" • ");
+const nm = document.createElement("div");
+nm.className = "name";
+nm.textContent = a.name;
+
+const sub = document.createElement("div");
+sub.className = "role";
+sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
+        
           meta.append(nm, sub);
           who.append(av, meta);
           const link = document.createElement("a"); link.className="link"; link.textContent="LinkedIn"; link.target="_blank"; link.rel="noreferrer";
@@ -1208,7 +1227,9 @@ async function saveMeetingFromDialog(){
   if (new Date(payload.endISO) <= new Date(payload.startISO)){
     alert("End time must be after start time."); return;
   }
-
+const now = Date.now();
+if (!id) payload.createdAtMs = now;
+payload.updatedAtMs = now;
    try {
     await upsertMeeting(payload);   // <-- write to subcollection
     meetingDialog.close();
@@ -1272,52 +1293,61 @@ async function renderImportExport(){
 
   // IMPORT
   inp.onchange = async (e) => {
-    const f = e.target.files?.[0]; 
-    if (!f) return;
-    try {
-      const parsed = JSON.parse(await f.text());
+  const f = e.target.files?.[0];
+  if (!f) return;
 
-      // Replace ALL meetings
-      const ms = await MEETINGS.get();
-      let batch = db.batch();
-      ms.forEach(doc => batch.delete(doc.ref));
-      (parsed.meetings || []).forEach(m => {
-        const id = m.id || uid();
-        batch.set(MEETINGS.doc(id), { ...m, id });
-      });
-      await batch.commit();
+  try {
+    const parsed = JSON.parse(await f.text());
+    const meetingsIn = Array.isArray(parsed.meetings) ? parsed.meetings : [];
+    const travelIn   = Array.isArray(parsed.travel)   ? parsed.travel   : [];
+    const sessionsIn = Array.isArray(parsed.sessions) ? parsed.sessions : [];
 
-      // Replace ALL travel
-      const ts = await TRAVEL.get();
-      batch = db.batch();
-      ts.forEach(doc => batch.delete(doc.ref));
-      (parsed.travel || []).forEach(t => {
-        const id = t.id || uid();
-        batch.set(TRAVEL.doc(id), { ...t, id });
-      });
-      await batch.commit();
+    // --- helper to merge by 'id' and skip stale docs (older updatedAtMs) ---
+    async function mergeCollection(colRef, incoming) {
+      // build a map of current docs
+      const curSnap = await colRef.get();
+      const curMap = new Map(curSnap.docs.map(d => [d.id, d.data()]));
 
-      // Replace ALL sessions (NEW)
-      if (Array.isArray(parsed.sessions)) {
-        const ss = await SESSIONS.get();
-        batch = db.batch();
-        ss.forEach(doc => batch.delete(doc.ref));
-        (parsed.sessions || []).forEach(s => {
-          const id = s.id || uid();
-          batch.set(SESSIONS.doc(id), { ...s, id });
-        });
-        await batch.commit();
+      const batch = db.batch();
+
+      for (const obj of incoming) {
+        // ensure an id
+        const id = obj.id || uid();
+        obj.id = id;
+
+        const existing = curMap.get(id);
+        const incomingUpdated = obj.updatedAtMs ?? 0;
+        const existingUpdated = existing?.updatedAtMs ?? 0;
+
+        // only write if:
+        //  - new doc OR
+        //  - incoming is same/newer than existing
+        if (!existing || incomingUpdated >= existingUpdated) {
+          // never drop fields that already exist in Firestore: merge: true
+          batch.set(colRef.doc(id), obj, { merge: true });
+        }
       }
 
-      if ('gptUrl' in parsed)  await setSharedDoc('gptUrl',  parsed.gptUrl  || '');
-      if ('logoUrl' in parsed) await setSharedDoc('logoUrl', parsed.logoUrl || '');
-    } catch(err){
-      console.error(err);
-      alert("Invalid JSON file");
-    } finally {
-      inp.value = '';
+      await batch.commit();
     }
-  };
+
+    // Merge-only; do NOT delete anything
+    await mergeCollection(MEETINGS, meetingsIn);
+    await mergeCollection(TRAVEL,   travelIn);
+    await mergeCollection(SESSIONS, sessionsIn);
+
+    // Small settings (merge is fine here too)
+    if ('gptUrl'  in parsed) await setSharedDoc('gptUrl',  parsed.gptUrl  || '');
+    if ('logoUrl' in parsed) await setSharedDoc('logoUrl', parsed.logoUrl || '');
+
+    alert('Import complete (merged). Local edits preserved.');
+  } catch(err) {
+    console.error(err);
+    alert("Invalid JSON file");
+  } finally {
+    inp.value = '';
+  }
+};
 
   // EXPORT
   btnExport.onclick = async () => {
@@ -1375,7 +1405,9 @@ t_save.onclick = async () => {
   if (payload.startISO && payload.endISO && new Date(payload.endISO) < new Date(payload.startISO)){
     alert("Travel end must be after start."); return;
   }
-
+const now = Date.now();
+if (!id) payload.createdAtMs = now;
+payload.updatedAtMs = now;
   try {
     await upsertTravel(payload);
     travelDialog.close();
