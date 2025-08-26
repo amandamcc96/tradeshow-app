@@ -84,6 +84,10 @@
 }
 .item.meeting .title{ color: var(--text); }
 /* Hourly pills: colored outline + subtle fill of the same hue (not pale gray) */
+  .item.session.afterhours{
+  border-left-color: var(--afterhours-accent);
+}
+  
 .meeting-pill.session{
   border:1px solid var(--session-accent);
   background: var(--session-accent);
@@ -99,6 +103,14 @@
 }
 .meeting-pill.meeting .muted{ color: rgba(255,255,255,.85); }
     /* === Blue background + interactive polish === */
+    .meeting-pill.session.afterhours{
+  border: 1px solid var(--afterhours-accent);
+  background: var(--afterhours-accent);
+  color: #111827;               /* readable dark text */
+}
+.meeting-pill.session.afterhours .muted{
+  color: rgba(17,24,39,.8);
+}
 :root{
   --bg:#1d4ed8;          /* page background */
   --card:#ffffff;        /* cards/boxes stay white */
@@ -175,7 +187,7 @@ h1{
   
   --session-accent:#FDBA74;   /* light orange for sessions */
   --meeting-accent:#EA580C;   /* dark orange for meetings */
-
+  --afterhours-accent:#bbf7d0; 
 }
 
 /* Make header text readable on the blue background */
@@ -322,6 +334,18 @@ header .tools .btn {
 
   /* keep the LinkedIn link aligned to the right of the bigger avatar */
   .attendee .link{ margin-left:96px; }
+}
+    #gptCard .title {
+  font-size: 26px;      /* was 20px */
+  line-height: 1.15;
+}
+
+/* Large primary button option */
+.btn.lg {
+  padding: 12px 18px;
+  font-size: 16px;
+  border-radius: 14px;
+  min-height: 48px;
 }
   </style>
 
@@ -931,6 +955,9 @@ let sessions = [];
     card.className = "item";
 if (it.kind === 'session') card.classList.add('session');
     else if (it.kind === 'meeting') card.classList.add('meeting');
+    if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) {
+  card.classList.add('afterhours');
+}
     const c = document.createElement("div");
     c.className = "item-c";
 
@@ -1025,6 +1052,9 @@ const slot = items.filter(it => {
         pill.className = "meeting-pill";
         if (it.kind === 'session') pill.classList.add('session'); // keeps your purple style
         else if (it.kind === 'meeting') pill.classList.add('meeting');
+        if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) {
+  pill.classList.add('afterhours');
+}
         pill.innerHTML = `<strong>${it.title}</strong> <span class="muted">${fmtTime(it.startISO)}–${fmtTime(it.endISO)}</span>`;
         box.append(pill);
       });
@@ -1240,15 +1270,21 @@ payload.updatedAtMs = now;
 }
 
     function renderGpt(){
-      if(gptUrl){
-        openGptA.href = gptUrl;
-        openGptA.removeAttribute('disabled');
-        gptHint.style.display = "none";
-      }else{
-        openGptA.href="#";
-        gptHint.style.display = "block";
-      }
-    }
+  const has = !!gptUrl;
+  if (has){
+    openGptA.href = gptUrl;
+    openGptA.removeAttribute('disabled');
+    openGptA.classList.add('lg');          // make it bigger
+    gptHint.style.display = "none";
+    setGptBtn.style.display = "none";      // hide Set Link when set
+  }else{
+    openGptA.href = "#";
+    openGptA.setAttribute('disabled', ''); // no link yet
+    openGptA.classList.remove('lg');
+    gptHint.style.display = "block";
+    setGptBtn.style.display = "inline-flex";
+  }
+}
 function renderLogo(){
   // If there's no saved URL: hide image, show the button, and bail.
   if (!logoUrl) {
