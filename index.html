@@ -203,7 +203,49 @@ header .tools .btn {
   align-items:center;
   gap:12px;
 }
+.details-grid{
+  display:grid;
+  gap:16px;
+  grid-template-columns: 1fr 2fr;
+}
+@media (max-width: 640px){
+  .details-grid{
+    grid-template-columns: 1fr;
+  }
+}
 
+/* Reusable avatar image class (lets CSS control size responsively) */
+.avatar-img{
+  width:44px;
+  height:44px;
+  object-fit:cover;
+  border-radius:999px;
+}
+
+/* Make attendee box + photos bigger on mobile */
+@media (max-width: 640px){
+  .attendee{
+    padding:14px;
+    border-radius:14px;
+  }
+  .attendee .avatar{
+    width:64px;
+    height:64px;
+    font-size:18px;
+  }
+  .avatar-img{
+    width:64px;
+    height:64px;
+  }
+
+  /* Editor dialog */
+  .ae{ padding:12px; }
+  .ae-avatar, .ae-avatar img{ width:64px; height:64px; }
+  .ae-grid{ grid-template-columns:72px 1fr; }
+
+  /* Let the LinkedIn button wrap under the name on narrow screens */
+  .attendee .row{ flex-wrap:wrap; gap:12px; align-items:flex-start; }
+  .attendee .link{ margin-left:72px; }
 .brand-logo{
   height:32px;   /* tweak if you want it bigger/smaller */
   width:auto;
@@ -953,12 +995,10 @@ lbl.textContent = labelFromHour(hr); // shows 07:00 AM, 08:00 AM, ... in PT
     const hourEndMin   = hourStartMin + 60;
 
     // Decide if an item occupies this PT hour slot
-    const slot = items.filter(it => {
-      const s = ptMinutes(it.startISO);
-      const e = ptMinutes(it.endISO);
-      return s < hourEndMin && e > hourStartMin;  // overlap test in PT
-    });
-
+const slot = items.filter(it => {
+  const s = ptMinutes(it.startISO);   // minutes since midnight PT
+  return Math.floor(s / 60) === hr;   // bucket by START hour only
+}).sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
     if (slot.length === 0){
       const g = document.createElement("div");
       g.className = "ghost";
@@ -1010,7 +1050,8 @@ lbl.textContent = labelFromHour(hr); // shows 07:00 AM, 08:00 AM, ... in PT
         head.append(t, desc);
 
         const c = document.createElement("div"); c.className="card-c";
-        const inner = document.createElement("div"); inner.className="grid"; inner.style.gridTemplateColumns="1fr 2fr"; inner.style.gap="16px";
+        const inner = document.createElement("div");
+inner.className = "details-grid";; inner.style.gridTemplateColumns="1fr 2fr"; inner.style.gap="16px";
 
         const leftCol = document.createElement("div");
         if(m.description){
@@ -1040,14 +1081,11 @@ lbl.textContent = labelFromHour(hr); // shows 07:00 AM, 08:00 AM, ... in PT
           const av = document.createElement("div");
 av.className = "avatar";
 if (a.photoUrl) {
-  const img = document.createElement("img");
-  img.src = a.photoUrl;
-  img.alt = a.name || "Photo";
-  img.style.width = "44px";
-  img.style.height = "44px";
-  img.style.objectFit = "cover";
-  img.style.borderRadius = "999px";
-  av.append(img);
+const img = document.createElement("img");
+img.src = a.photoUrl;
+img.alt = a.name || "Photo";
+img.className = "avatar-img";
+av.append(img);
 } else {
   av.textContent = (a.name || "?").slice(0,1).toUpperCase();
 }
