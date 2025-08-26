@@ -933,12 +933,18 @@ function renderHourly(){
     const hr = startHour + i;
     const row = document.createElement("div");
     row.className = "hour-row";
-
+function labelFromHour(hr, use12 = true){
+  if (use12){
+    const h12 = ((hr + 11) % 12) + 1; // 0..23 -> 1..12
+    const ampm = hr < 12 ? "AM" : "PM";
+    return `${h12.toString().padStart(2,"0")}:00 ${ampm}`;
+  }
+  return `${hr.toString().padStart(2,"0")}:00`;
+}
     // Label strictly in PT
-    const lbl = document.createElement("div");
-    lbl.className = "hour-label";
-const labelIso = new Date(Date.UTC(2000,0,1,hr,0,0)).toISOString();
-lbl.textContent = fmtTime(labelIso);
+ const lbl = document.createElement("div");
+lbl.className = "hour-label";
+lbl.textContent = labelFromHour(hr); // shows 07:00 AM, 08:00 AM, ... in PT
 
     const cell = document.createElement("div");
     cell.className = "hour-cell";
