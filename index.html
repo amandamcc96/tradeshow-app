@@ -312,8 +312,7 @@ header .tools .btn {
   width:72px;
   height:72px;
 }
-#detailsCol .card .card-h .title { font-size: 20px; line-height:1.2; }
-#detailsCol .card .card-h .title span:first-child { font-weight: 800; }
+
 .attendee .name{
   font-size:16px;
   font-weight:700;
@@ -342,30 +341,6 @@ header .tools .btn {
 }
 
 /* Large primary button option */
-.btn.lg {
-  padding: 12px 18px;
-  font-size: 16px;
-  border-radius: 14px;
-  min-height: 48px;
-}
-    .item .item-c { min-height: 56px; align-items: center; }
-
-/* One-line clamp for titles/subtitles so rows don't grow unevenly */
-.item .title{
-  font-size:14px; line-height:1.25;
-  display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical;
-  overflow:hidden;
-}
-.item .sub{
-  display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical;
-  overflow:hidden; max-width:38vw;
-}
-
-/* Make each hourly row the same height too */
-.hour-row { min-height: 56px; }
-    #gptCard .title { font-size: 26px; line-height: 1.15; }
-
-/* Large button utility */
 .btn.lg {
   padding: 12px 18px;
   font-size: 16px;
@@ -452,7 +427,6 @@ header .tools .btn {
                 <button class="btn icon" id="prevDay" title="Previous day">◀</button>
                 <div id="activeDateLbl" style="font-weight:600"></div>
                 <button class="btn icon" id="nextDay" title="Next day">▶</button>
-                 <input id="jumpDate" type="date" class="btn sm" />
               </div>
               <div class="tabs">
                 <button class="tab active" id="tabAgenda">Agenda</button>
@@ -563,7 +537,6 @@ header .tools .btn {
         <div class="two">
           <input id="t_start" type="datetime-local" />
           <input id="t_end" type="datetime-local" />
-        
         </div>
       </div>
     </div>
@@ -585,21 +558,7 @@ header .tools .btn {
     hour: "2-digit", minute: "2-digit", timeZone: TZ,
         hour12: true  
   });
-const jumpDate = $("#jumpDate");
-    function renderHeaderControls(){
-  activeDateLbl.textContent = fmtDate(activeDate);
-  tabAgenda.classList.toggle("active", view==="agenda");
-  tabHourly.classList.toggle("active", view==="hourly");
-  if (jumpDate) jumpDate.value = ptDateStr(activeDate);
-}
 
-// Date picker handler comes after this
-jumpDate.addEventListener('change', (e) => {
-  if (!e.target.value) return;
-  const [y, m, d] = e.target.value.split('-').map(Number);
-  activeDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toISOString();
-  renderAll();
-});
 const fmtDate = (iso) =>
   new Date(iso).toLocaleDateString([], {
     year: "numeric", month: "short", day: "2-digit", timeZone: TZ
@@ -690,7 +649,6 @@ let logoUrl = "";
     const hourlyGrid = $("#hourlyGrid");
     const addMeetingBtn = $("#addMeetingBtn");
     const detailsCol = $("#detailsCol");
-    
     const openGptA = $("#openGpt");
     const setGptBtn = $("#setGptBtn");
     const gptHint = $("#gptHint");
@@ -892,31 +850,7 @@ function renderAttendeeEditor(list){
   }
   list.forEach(a => attendeeEditorRoot.append(buildAttendeeRow(a)));
 }
-function localPartsInTZ(iso, tz = TZ){
-  const d = new Date(iso);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year:'numeric', month:'2-digit', day:'2-digit',
-    hour:'2-digit', minute:'2-digit', second:'2-digit',
-    hour12:false
-  }).formatToParts(d).reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
-  const date = `${parts.year}-${parts.month}-${parts.day}`;
-  const datetime = `${date}T${parts.hour}:${parts.minute}:${parts.second}`;
-  return { date, datetime };
-}
 
-function withPTFields(x){
-  const out = { ...x };
-  if (x.startISO){
-    const p = localPartsInTZ(x.startISO);
-    out.startLocalPT = p.datetime;      // e.g. "2025-09-02T19:00:00"
-    out.datePT = p.date;                 // e.g. "2025-09-02"
-  }
-  if (x.endISO){
-    out.endLocalPT = localPartsInTZ(x.endISO).datetime;
-  }
-  return out;
-}
 function collectAttendeesFromEditor(){
   const rows = Array.from(attendeeEditorRoot.querySelectorAll(".ae"));
   return rows.map(row => {
@@ -955,28 +889,30 @@ function collectAttendeesFromEditor(){
     const t_save = $("#t_save");
     const t_cancel = $("#t_cancel");
 
-function daysFromCalendar(){
+ function daysFromMeetings(list){
   const fmt = new Intl.DateTimeFormat('en-CA', {
     timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
   });
-  const byDay = new Map(); // key: 'YYYY-MM-DD' (PT) -> earliest ISO on that day
-  [...meetings, ...sessions].forEach(x => {
-    const k = fmt.format(new Date(x.startISO));
+  const byDay = new Map(); // key = 'YYYY-MM-DD' in PT -> earliest ISO on that day
+  list.forEach(m => {
+    const k = fmt.format(new Date(m.startISO));
     const cur = byDay.get(k);
-    if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(k, x.startISO);
+    if (!cur || new Date(m.startISO) < new Date(cur)) byDay.set(k, m.startISO);
   });
-  return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b));
+  return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b)); // ISO strings
 }
-
-function shiftDay(dir){
-  const days = daysFromCalendar();
-  const idx = days.findIndex(d => sameDay(d, activeDate));
+    function shiftDay(dir){
+  const days = daysFromMeetings(meetings);
+  const idx = days.findIndex(d => sameDay(d, activeDate)); // both ISO strings
   const next = days[idx + dir];
   if (next) activeDate = next;
   renderAll();
 }
-  
-
+    function renderHeaderControls(){
+      activeDateLbl.textContent = fmtDate(activeDate);
+      tabAgenda.classList.toggle("active", view==="agenda");
+      tabHourly.classList.toggle("active", view==="hourly");
+    }
 const SESSIONS = COL.doc('sessions').collection('items');
 
 // Helpers
@@ -990,10 +926,6 @@ function deleteSession(id){ return SESSIONS.doc(id).delete(); }
 let sessions = [];
     SESSIONS.orderBy('startISO').onSnapshot(async snap => {
   sessions = snap.docs.map(d => d.data());
-      const days = daysFromCalendar();
-if (days.length && !days.some(d => sameDay(d, activeDate))) {
-  activeDate = days[0];
-}
   renderAll();                    // so the list/grid picks them up
 });
   function itemsForDay(iso){
@@ -1069,38 +1001,48 @@ if (it.kind === 'session') card.classList.add('session');
     agendaList.append(card);
   });
 }
+
 function renderHourly(){
   hourlyGrid.innerHTML = "";
-  const items = itemsForDay(activeDate);
+  const items = itemsForDay(activeDate);       // uses sameDay() in PT already
 
   const wrap = document.createElement("div");
   wrap.className = "hour-grid";
 
-  const startHour = 7;   // 7am PT
-  const endHour   = 22;  // 10pm PT
+  const startHour = 7;        // 7 AM PT
+  const hoursToShow = 13;     // 7am–8pm PT
 
-  const labelFromHour = (hr) => {
-    const h12 = ((hr + 11) % 12) + 1;
+  for (let i = 0; i < hoursToShow; i++){
+    const hr = startHour + i;
+    const row = document.createElement("div");
+    row.className = "hour-row";
+function labelFromHour(hr, use12 = true){
+  if (use12){
+    const h12 = ((hr + 11) % 12) + 1; // 0..23 -> 1..12
     const ampm = hr < 12 ? "AM" : "PM";
-    return `${String(h12).padStart(2,"0")}:00 ${ampm}`;
-  };
-
-  for (let hr = startHour; hr < endHour; hr++){
-    const row  = document.createElement("div"); row.className = "hour-row";
-
-    const lbl  = document.createElement("div");
-    lbl.className = "hour-label";
-    lbl.textContent = labelFromHour(hr);
+    return `${h12.toString().padStart(2,"0")}:00 ${ampm}`;
+  }
+  return `${hr.toString().padStart(2,"0")}:00`;
+}
+    // Label strictly in PT
+ const lbl = document.createElement("div");
+lbl.className = "hour-label";
+lbl.textContent = labelFromHour(hr); // shows 07:00 AM, 08:00 AM, ... in PT
 
     const cell = document.createElement("div");
     cell.className = "hour-cell";
 
-    const slot = items
-      .filter(it => Math.floor(ptMinutes(it.startISO)/60) === hr)
-      .sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
+    const hourStartMin = hr * 60;
+    const hourEndMin   = hourStartMin + 60;
 
+    // Decide if an item occupies this PT hour slot
+const slot = items.filter(it => {
+  const s = ptMinutes(it.startISO);   // minutes since midnight PT
+  return Math.floor(s / 60) === hr;   // bucket by START hour only
+}).sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
     if (slot.length === 0){
-      const g = document.createElement("div"); g.className = "ghost";
+      const g = document.createElement("div");
+      g.className = "ghost";
       cell.append(g);
     } else {
       const box = document.createElement("div");
@@ -1108,11 +1050,12 @@ function renderHourly(){
       slot.forEach(it => {
         const pill = document.createElement("span");
         pill.className = "meeting-pill";
-        if (it.kind === 'session') pill.classList.add('session'); else pill.classList.add('meeting');
-        if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) pill.classList.add('afterhours');
-        pill.innerHTML = `<strong>${it.title}</strong>
-          <span class="muted">${fmtTime(it.startISO)}–${fmtTime(it.endISO)}</span>
-          ${(it.location || it.stage) ? ` <span class="muted">• ${(it.location || it.stage)}</span>` : ""}`;
+        if (it.kind === 'session') pill.classList.add('session'); // keeps your purple style
+        else if (it.kind === 'meeting') pill.classList.add('meeting');
+        if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) {
+  pill.classList.add('afterhours');
+}
+        pill.innerHTML = `<strong>${it.title}</strong> <span class="muted">${fmtTime(it.startISO)}–${fmtTime(it.endISO)}</span>`;
         box.append(pill);
       });
       cell.append(box);
@@ -1124,13 +1067,6 @@ function renderHourly(){
 
   hourlyGrid.append(wrap);
 }
-
-  function ptDateStr(iso){
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
-  }).format(new Date(iso)); // "YYYY-MM-DD"
-}
-
     function renderDetails(){
       detailsCol.innerHTML = "";
       const dayMeetings = meetings
@@ -1216,18 +1152,12 @@ sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
           rightCol.append(wrap);
         });
 
-  inner.append(rightCol, leftCol);
+      inner.append(rightCol, leftCol);
         c.append(inner);
         card.append(head, c);
         detailsCol.append(card);
       });
     }
-function placeTravelOnRight(){
-  const travelCard = travelSection.closest('.card'); // wrapper of #travelSection
-  if (travelCard && detailsCol && travelCard.parentElement !== detailsCol){
-    detailsCol.append(travelCard);
-  }
-}
 
     function renderTravel(){
       const root = travelSection;
@@ -1339,19 +1269,19 @@ payload.updatedAtMs = now;
   }
 }
 
- function renderGpt(){
+    function renderGpt(){
   const has = !!gptUrl;
   if (has){
     openGptA.href = gptUrl;
     openGptA.removeAttribute('disabled');
-    openGptA.classList.add('lg');
-    gptHint.style.display = "none";     // hide the text under the title
-    setGptBtn.style.display = "none";   // hide Set Link button
-  } else {
+    openGptA.classList.add('lg');          // make it bigger
+    gptHint.style.display = "none";
+    setGptBtn.style.display = "none";      // hide Set Link when set
+  }else{
     openGptA.href = "#";
-    openGptA.setAttribute('disabled', '');
+    openGptA.setAttribute('disabled', ''); // no link yet
     openGptA.classList.remove('lg');
-    gptHint.style.display = "block";    // show help when no link
+    gptHint.style.display = "block";
     setGptBtn.style.display = "inline-flex";
   }
 }
@@ -1398,41 +1328,56 @@ async function renderImportExport(){
   btnImport.onclick = () => inp.click();
 
   // IMPORT
- inp.onchange = async (e) => {
+  inp.onchange = async (e) => {
   const f = e.target.files?.[0];
   if (!f) return;
+
   try {
     const parsed = JSON.parse(await f.text());
     const meetingsIn = Array.isArray(parsed.meetings) ? parsed.meetings : [];
     const travelIn   = Array.isArray(parsed.travel)   ? parsed.travel   : [];
     const sessionsIn = Array.isArray(parsed.sessions) ? parsed.sessions : [];
 
+    // --- helper to merge by 'id' and skip stale docs (older updatedAtMs) ---
     async function mergeCollection(colRef, incoming) {
+      // build a map of current docs
       const curSnap = await colRef.get();
       const curMap = new Map(curSnap.docs.map(d => [d.id, d.data()]));
+
       const batch = db.batch();
+
       for (const obj of incoming) {
+        // ensure an id
         const id = obj.id || uid();
         obj.id = id;
+
         const existing = curMap.get(id);
         const incomingUpdated = obj.updatedAtMs ?? 0;
         const existingUpdated = existing?.updatedAtMs ?? 0;
+
+        // only write if:
+        //  - new doc OR
+        //  - incoming is same/newer than existing
         if (!existing || incomingUpdated >= existingUpdated) {
+          // never drop fields that already exist in Firestore: merge: true
           batch.set(colRef.doc(id), obj, { merge: true });
         }
       }
+
       await batch.commit();
     }
 
+    // Merge-only; do NOT delete anything
     await mergeCollection(MEETINGS, meetingsIn);
     await mergeCollection(TRAVEL,   travelIn);
     await mergeCollection(SESSIONS, sessionsIn);
 
+    // Small settings (merge is fine here too)
     if ('gptUrl'  in parsed) await setSharedDoc('gptUrl',  parsed.gptUrl  || '');
     if ('logoUrl' in parsed) await setSharedDoc('logoUrl', parsed.logoUrl || '');
 
     alert('Import complete (merged). Local edits preserved.');
-  } catch (err) {
+  } catch(err) {
     console.error(err);
     alert("Invalid JSON file");
   } finally {
@@ -1441,28 +1386,26 @@ async function renderImportExport(){
 };
 
   // EXPORT
-btnExport.onclick = async () => {
-  const [msSnap, tsSnap, ssSnap] = await Promise.all([
-    MEETINGS.get(),
-    TRAVEL.get(),
-    SESSIONS.get()
-  ]);
-
-  const file = {
-    meetings: msSnap.docs.map(d => withPTFields(d.data())),
-    travel:   tsSnap.docs.map(d => withPTFields(d.data())),
-    sessions: ssSnap.docs.map(d => withPTFields(d.data())),
-    gptUrl,
-    logoUrl
+  btnExport.onclick = async () => {
+    const [msSnap, tsSnap, ssSnap] = await Promise.all([
+      MEETINGS.get(),
+      TRAVEL.get(),
+      SESSIONS.get()
+    ]);
+    const file = {
+      meetings: msSnap.docs.map(d => d.data()),
+      travel:   tsSnap.docs.map(d => d.data()),
+      sessions: ssSnap.docs.map(d => d.data()),
+      gptUrl,
+      logoUrl
+    };
+    const blob = new Blob([JSON.stringify(file, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `tradeshow-data-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
-
-  const blob = new Blob([JSON.stringify(file, null, 2)], {type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `tradeshow-data-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-};
 
   root.append(btnImport, btnExport, inp);
   $("#importExport").innerHTML = "";
@@ -1569,28 +1512,16 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
   });
 }
     function renderAll(){
-  renderHeaderControls();
-
-  if (view === "agenda") {
-    agendaList.classList.remove("hidden");
-    hourlyGrid.classList.add("hidden");
-    renderAgenda();
-  } else {
-    hourlyGrid.classList.remove("hidden");
-    agendaList.classList.add("hidden");
-    renderHourly();
-  }
-
-  renderDetails();
-
-  // Ensure Travel card sits under the meetings on the right
-  placeTravelOnRight();
-
-  renderTravel();
-  renderGpt();
-  renderLogo();
-  renderImportExport();
-}
+      renderHeaderControls();
+      (view==="agenda"? (agendaList.classList.remove("hidden"), hourlyGrid.classList.add("hidden"), renderAgenda())
+                      : (hourlyGrid.classList.remove("hidden"), agendaList.classList.add("hidden"), renderHourly()));
+      renderDetails();
+      renderTravel();
+      renderGpt();
+        renderLogo();  
+      renderImportExport();
+      
+    }
 
     // INITIAL LOAD from Firestore + realtime subscriptions
     (async function init(){
@@ -1632,6 +1563,7 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
   });
 
   renderAll(); // first paint
+})();
 })();
   </script>
 </body>
