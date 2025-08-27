@@ -889,20 +889,20 @@ function collectAttendeesFromEditor(){
     const t_save = $("#t_save");
     const t_cancel = $("#t_cancel");
 
- function daysFromMeetings(list){
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
-  });
-  const byDay = new Map(); // key = 'YYYY-MM-DD' in PT -> earliest ISO on that day
-  list.forEach(m => {
-    const k = fmt.format(new Date(m.startISO));
-    const cur = byDay.get(k);
-    if (!cur || new Date(m.startISO) < new Date(cur)) byDay.set(k, m.startISO);
-  });
-  return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b)); // ISO strings
-}
-    function shiftDay(dir){
-  const days = daysFromMeetings(meetings);
+ function daysFromCalendar(){
+   const fmt = new Intl.DateTimeFormat('en-CA', {
+     timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
+   });
+   const byDay = new Map(); // key: 'YYYY-MM-DD' (PT) -> earliest ISO on that day
+   [...meetings, ...sessions].forEach(x => {
+     const k = fmt.format(new Date(x.startISO));
+     const cur = byDay.get(k);
+     if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(k, x.startISO);
+   });
+   return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b));
+ }
+ function shiftDay(dir){
+   const days = daysFromCalendar();
   const idx = days.findIndex(d => sameDay(d, activeDate)); // both ISO strings
   const next = days[idx + dir];
   if (next) activeDate = next;
@@ -924,11 +924,13 @@ function deleteSession(id){ return SESSIONS.doc(id).delete(); }
 
 // State
 let sessions = [];
-    SESSIONS.orderBy('startISO').onSnapshot(async snap => {
+ SESSIONS.orderBy('startISO').onSnapshot(async snap => {
   sessions = snap.docs.map(d => d.data());
-  renderAll();                    // so the list/grid picks them up
+  const sDays = daysFromCalendar();
+  if (sDays.length && !sDays.some(d => sameDay(d, activeDate))) activeDate = sDays[0];
+  renderAll();
 });
-  function itemsForDay(iso){
+function itemsForDay(iso){
   const m = meetings
     .filter(x => sameDay(x.startISO, iso))
     .map(x => ({ ...x, kind: 'meeting' }));
@@ -1010,7 +1012,8 @@ function renderHourly(){
   wrap.className = "hour-grid";
 
   const startHour = 7;        // 7 AM PT
-  const hoursToShow = 13;     // 7am–8pm PT
+const hoursToShow = 17;     // 7am–11pm PT so After Hours pills appear
+
 
   for (let i = 0; i < hoursToShow; i++){
     const hr = startHour + i;
@@ -1315,7 +1318,9 @@ function renderLogo(){
 async function renderImportExport(){
   const root = document.createElement("div");
   const inp = document.createElement("input");
-  inp.type = "file"; inp.accept = "application/json"; inp.className = "hidden";
+inp.type = "file";
+inp.accept = "application/json";
+inp.className = "hidden";
 
   const btnImport = document.createElement("button"); 
   btnImport.className = "btn sm"; 
@@ -1544,13 +1549,11 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
       return;
     }
     meetings = snap.docs.map(d => d.data());
-    if (!meetings.find(m => sameDay(m.startISO, activeDate)) && meetings.length){
-      activeDate = meetings[0].startISO;
-    }
-    renderAll();
+ const mDays = daysFromCalendar();
+ if (mDays.length && !mDays.some(d => sameDay(d, activeDate))) activeDate = mDays[0];
+ renderAll();
   });
-
-  // Realtime travel (subcollection)
+// Realtime travel (subcollection)
   TRAVEL.orderBy('startISO').onSnapshot(async snap => {
     if (snap.empty) {
       const batch = db.batch();
