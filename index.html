@@ -445,15 +445,6 @@ header .tools .btn {
         <!-- Ask our GPT -->
         
 
-        <!-- Travel -->
-        <div class="card">
-          <div class="card-h">
-            <div class="title">✈️ Travel</div>
-            <div class="desc">Store flight, hotel, and ground confirmations.</div>
-          </div>
-          <div class="card-c" id="travelSection"></div>
-        </div>
-      </div>
 
       <!-- Right -->
       <div class="col gap16" id="detailsCol"></div>
@@ -652,7 +643,6 @@ let logoUrl = "";
     const openGptA = $("#openGpt");
     const setGptBtn = $("#setGptBtn");
     const gptHint = $("#gptHint");
-    const travelSection = $("#travelSection");
     const brandLogo  = $("#brandLogo");
 const setLogoBtn = $("#setLogoBtn");
 const logoDialog = $("#logoDialog");
@@ -1162,59 +1152,119 @@ sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
       });
     }
 
-    function renderTravel(){
-      const root = travelSection;
-      root.innerHTML = "";
-      const add = document.createElement("button"); add.className="btn"; add.textContent="➕ Add travel";
-      add.onclick = ()=>{
-        t_type.value="flight"; t_label.value=""; t_conf.value=""; t_details.value="";
-        t_start.value=""; t_end.value="";
-        travelDialog.dataset.editId = ""; travelDialog.showModal();
-      };
-      root.append(add);
-      const spacer = document.createElement("div");
-spacer.className = "spacer";
-root.append(spacer);
+  function renderTravel(){
+  // Remove any previous travel card
+  const old = document.getElementById("travelCard");
+  if (old) old.remove();
 
-      if(travel.length===0){
-        const div = document.createElement("div"); div.className="muted"; div.textContent="No travel saved.";
-        root.append(div); return;
+  // Build a fresh card
+  const card = document.createElement("div");
+  card.className = "card";
+  card.id = "travelCard";
+
+  const head = document.createElement("div");
+  head.className = "card-h";
+  head.innerHTML = `
+    <div class="title">✈️ Travel</div>
+    <div class="desc">Flight, hotel, and ground confirmations.</div>
+  `;
+
+  const body = document.createElement("div");
+  body.className = "card-c";
+
+  // Add button
+  const add = document.createElement("button");
+  add.className = "btn";
+  add.textContent = "➕ Add travel";
+  add.onclick = () => {
+    t_type.value="flight"; t_label.value=""; t_conf.value=""; t_details.value="";
+    t_start.value=""; t_end.value="";
+    travelDialog.dataset.editId = "";
+    travelDialog.showModal();
+  };
+
+  // List container
+  const listRoot = document.createElement("div");
+  listRoot.style.marginTop = "8px";
+
+  // Render list items (same behavior as before, just writing into listRoot)
+  if (travel.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "No travel saved.";
+    listRoot.append(empty);
+  } else {
+    travel.forEach(t => {
+      const row = document.createElement("div");
+      row.className = "item";
+      const inner = document.createElement("div");
+      inner.className = "item-c";
+
+      const left = document.createElement("div");
+      const head = document.createElement("div");
+      head.className = "title";
+      head.textContent = `[${t.type?.toUpperCase() || "TRAVEL"}] ${t.label}`;
+
+      const sub = document.createElement("div");
+      sub.className = "muted";
+      sub.style.fontSize = "12px";
+      const bits = [];
+      if (t.confirmation) bits.push(`Conf#: ${t.confirmation}`);
+      if (t.startISO) bits.push(`Start ${fmtDate(t.startISO)} ${fmtTime(t.startISO)}`);
+      if (t.endISO)   bits.push(`End ${fmtDate(t.endISO)} ${fmtTime(t.endISO)}`);
+      sub.textContent = bits.join(" • ");
+
+      left.append(head, sub);
+      if (t.details){
+        const d = document.createElement("div");
+        d.style.fontSize = "12px";
+        d.textContent = t.details;
+        left.appendChild(d);
       }
 
-      travel.forEach(t => {
-        const row = document.createElement("div");
-        row.className="item"; const inner=document.createElement("div"); inner.className="item-c";
-        const left = document.createElement("div");
-        const head = document.createElement("div"); head.className="title"; head.textContent = `[${t.type.toUpperCase()}] ${t.label}`;
-        const sub = document.createElement("div"); sub.className="muted"; sub.style.fontSize="12px";
-        const bits=[];
-        if(t.confirmation) bits.push(`Conf#: ${t.confirmation}`);
-        if(t.startISO) bits.push(`Start ${fmtDate(t.startISO)} ${fmtTime(t.startISO)}`);
-        if(t.endISO) bits.push(`End ${fmtDate(t.endISO)} ${fmtTime(t.endISO)}`);
-        sub.textContent = bits.join(" • ");
-        if(t.details){ const d=document.createElement("div"); d.style.fontSize="12px"; d.textContent=t.details; left.append(head, sub, d); }
-        else left.append(head, sub);
-        const tools = document.createElement("div"); tools.className="tools";
-        const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
-        edit.onclick = ()=>{
-          t_type.value=t.type; t_label.value=t.label; t_conf.value=t.confirmation||""; t_details.value=t.details||"";
-          t_start.value = t.startISO? new Date(t.startISO).toISOString().slice(0,16): "";
-          t_end.value = t.endISO? new Date(t.endISO).toISOString().slice(0,16): "";
-          travelDialog.dataset.editId = t.id; travelDialog.showModal();
-        };
-        const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
-   del.onclick = async () => {
-  if (!confirm("Delete this travel item?")) return;
-  try { await deleteTravel(t.id); }
-  catch(e){ console.error(e); alert("Delete failed."); }
-};
-        tools.append(edit, del);
-        inner.append(left, tools);
-        row.append(inner);
-        root.append(row);
-      });
-    }
+      const tools = document.createElement("div");
+      tools.className = "tools";
 
+      const edit = document.createElement("button");
+      edit.className = "btn sm";
+      edit.textContent = "✏️";
+      edit.onclick = () => {
+        t_type.value = t.type;
+        t_label.value = t.label;
+        t_conf.value = t.confirmation || "";
+        t_details.value = t.details || "";
+        t_start.value = t.startISO ? new Date(t.startISO).toISOString().slice(0,16) : "";
+        t_end.value   = t.endISO   ? new Date(t.endISO).toISOString().slice(0,16)   : "";
+        travelDialog.dataset.editId = t.id;
+        travelDialog.showModal();
+      };
+
+      const del = document.createElement("button");
+      del.className = "btn sm";
+      del.textContent = "🗑️";
+      del.onclick = async () => {
+        if (!confirm("Delete this travel item?")) return;
+        try { await deleteTravel(t.id); }
+        catch(e){ console.error(e); alert("Delete failed."); }
+      };
+
+      tools.append(edit, del);
+      inner.append(left, tools);
+      row.append(inner);
+      listRoot.append(row);
+    });
+  }
+
+  body.append(add);
+  const spacer = document.createElement("div");
+  spacer.className = "spacer";
+  body.append(spacer, listRoot);
+
+  card.append(head, body);
+
+  // Mount under the meeting details (right column)
+  detailsCol.append(card);
+}
   function openMeetingDialog(m){
   meetingDialog.dataset.editId = m?.id || "";
   dlgTitle.textContent = m ? "Edit meeting" : "New meeting";
