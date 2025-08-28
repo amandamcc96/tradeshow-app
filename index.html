@@ -1010,11 +1010,12 @@ function itemsForDay(iso){
   items.forEach(it => {
     const card = document.createElement("div");
     card.className = "item";
-if (it.kind === 'session') card.classList.add('session');
+    if (it.kind === 'session') card.classList.add('session');
     else if (it.kind === 'meeting') card.classList.add('meeting');
     if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) {
-  card.classList.add('afterhours');
-}
+      card.classList.add('afterhours');
+    }
+
     const c = document.createElement("div");
     c.className = "item-c";
 
@@ -1024,12 +1025,13 @@ if (it.kind === 'session') card.classList.add('session');
     title.textContent = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)} • ${it.title}`;
 
     const sub = document.createElement("div");
-sub.className = "sub";
+    sub.className = "sub";
+    const loc = displayLocation(it);
+    const booth = it.booth ? `Booth ${it.booth}` : "";
+    sub.textContent = [loc, booth].filter(Boolean).join(" • ");
 
-// build a consistent location string
-const loc = displayLocation(it);
-const booth = it.booth ? `Booth ${it.booth}` : "";
-sub.textContent = [loc, booth].filter(Boolean).join(" • ");
+    // ⬇️ THIS WAS MISSING
+    left.append(title, sub);
 
     const tools = document.createElement("div");
     tools.className = "tools";
@@ -1048,12 +1050,10 @@ sub.textContent = [loc, booth].filter(Boolean).join(" • ");
 
       tools.append(edit, del);
     } else {
-      // Optional: small “SESSION” chip for visibility
       const chip = document.createElement("span");
       chip.className = "chip";
       chip.textContent = "SESSION";
       tools.append(chip);
-      // (No edit/delete, and no right-side details card)
     }
 
     c.append(left, tools);
