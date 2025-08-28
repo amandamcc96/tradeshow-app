@@ -353,14 +353,6 @@ header .tools .btn {
   border-left-width: 4px;               /* keep the colored bar crisp */
 }
 
-#agendaList .item .item-c {
-  min-height: 72px;                     /* <<< key: makes bars look longer */
-  padding: 14px 16px;                   /* a touch roomier */
-  display: grid;
-  grid-template-columns: 1fr auto;      /* title/sub on left, chip/tools on right */
-  align-items: center;
-  gap: 12px;
-}
 
 #agendaList .item .title { line-height: 1.25; }
 #agendaList .item .sub   { margin-top: 4px; white-space: normal; }
@@ -369,7 +361,33 @@ header .tools .btn {
 #agendaList .item.session { border-left-color: var(--session-accent); }
 #agendaList .item.meeting { border-left-color: var(--meeting-accent); }
 #agendaList .item.session.afterhours { border-left-color: var(--afterhours-accent); }
-  
+    :root { --agenda-row-minh: 104px; }          /* tweak: 96–120px works well */
+
+#agendaList .item .item-c {
+  min-height: var(--agenda-row-minh);
+  padding: 18px 20px;                         /* add a bit more vertical space */
+  display: grid;
+  grid-template-columns: 1fr auto;            /* text left, tools/chip right */
+  align-items: center;
+  gap: 14px;
+}
+
+/* nicer spacing in the text stack */
+#agendaList .item .title { line-height: 1.3; }
+#agendaList .item .sub   { margin-top: 6px; white-space: normal; }
+
+/* Slightly shorter on small screens so it doesn’t feel oversized */
+@media (max-width: 640px){
+  :root { --agenda-row-minh: 88px; }
+  #agendaList .item .item-c { padding: 16px 18px; }
+}
+
+/* (optional) only make sessions extra-long */
+#agendaList .item.session .item-c { min-height: calc(var(--agenda-row-minh) + 8px); }
+#agendaList .item .sub {
+  white-space: normal;
+  max-width: 100%;
+}  
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -604,7 +622,21 @@ const fmtDate = (iso) =>
   const A = parts(aISO), B = parts(bISO);
   return A.year===B.year && A.month===B.month && A.day===B.day;
 };
+function displayLocation(it){
+  const fields = ['location','stage','venue','room','place','where','stageName','locationNote'];
+  for (const k of fields){
+    const v = it && typeof it[k] === 'string' ? it[k].trim() : '';
+    if (v) return v;
+  }
+  return '';
+}
 
+// (Optional) simple HTML escape since we'll inject into pill HTML
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
+}
     // seed
     const seedDate = (()=>{
       const now = new Date();
@@ -992,9 +1024,12 @@ if (it.kind === 'session') card.classList.add('session');
     title.textContent = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)} • ${it.title}`;
 
     const sub = document.createElement("div");
-    sub.className = "sub";
-    sub.textContent = `${it.location || it.stage || ""}${it.booth ? ` • Booth ${it.booth}` : ""}`;
-    left.append(title, sub);
+sub.className = "sub";
+
+// build a consistent location string
+const loc = displayLocation(it);
+const booth = it.booth ? `Booth ${it.booth}` : "";
+sub.textContent = [loc, booth].filter(Boolean).join(" • ");
 
     const tools = document.createElement("div");
     tools.className = "tools";
@@ -1081,7 +1116,11 @@ const slot = items.filter(it => {
         if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) {
   pill.classList.add('afterhours');
 }
-        pill.innerHTML = `<strong>${it.title}</strong> <span class="muted">${fmtTime(it.startISO)}–${fmtTime(it.endISO)}</span>`;
+        const loc = displayLocation(it);
+const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
+const meta = loc ? `${timeRange} • ${escapeHtml(loc)}` : timeRange;
+
+pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
         box.append(pill);
       });
       cell.append(box);
