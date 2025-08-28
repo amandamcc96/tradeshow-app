@@ -347,6 +347,29 @@ header .tools .btn {
   border-radius: 14px;
   min-height: 48px;
 }
+  #agendaList .item {
+  border-radius: 14px;
+  box-shadow: var(--shadow);            /* same subtle lift everywhere */
+  border-left-width: 4px;               /* keep the colored bar crisp */
+}
+
+#agendaList .item .item-c {
+  min-height: 72px;                     /* <<< key: makes bars look longer */
+  padding: 14px 16px;                   /* a touch roomier */
+  display: grid;
+  grid-template-columns: 1fr auto;      /* title/sub on left, chip/tools on right */
+  align-items: center;
+  gap: 12px;
+}
+
+#agendaList .item .title { line-height: 1.25; }
+#agendaList .item .sub   { margin-top: 4px; white-space: normal; }
+
+/* (already in your CSS, but restated for clarity) */
+#agendaList .item.session { border-left-color: var(--session-accent); }
+#agendaList .item.meeting { border-left-color: var(--meeting-accent); }
+#agendaList .item.session.afterhours { border-left-color: var(--afterhours-accent); }
+  
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
