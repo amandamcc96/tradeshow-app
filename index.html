@@ -257,7 +257,8 @@ header .tools .btn {
 #gptCard .card-h { 
   padding: 10px 12px;             /* tighter header */
 }
-#gptCard .tools .btn.sm {
+#gptCard .tools .btn,
+#gptCard .btn.sm {
   padding: 4px 8px;               /* smaller buttons */
   font-size: 12px;
 }
@@ -346,18 +347,6 @@ header .tools .btn {
   border-radius: 14px;
   min-height: 48px;
 }
-    /* Travel v2 */
-.travel-head{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--primary-50);border-bottom:1px solid var(--border)}
-.travel-group{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:12px}
-.travel-day{padding:8px 16px;color:var(--muted);font-size:12px;border-top:1px dashed var(--border);background:#fff}
-.seg{display:grid;grid-template-columns:110px 1fr auto;gap:12px;padding:12px 16px;border-top:1px solid var(--border);align-items:center}
-.seg .iata{font-weight:800;font-size:18px;letter-spacing:.5px}
-.seg .time{font-variant-numeric:tabular-nums}
-.seg .meta{font-size:12px;color:var(--muted)}
-.conn{padding:8px 16px;background:var(--primary-50);color:var(--muted);font-size:12px}
-.badge{border:1px solid var(--border);border-radius:999px;padding:3px 8px;font-size:12px}
-.badge.next{border-color:var(--blue)}
-.cursor{cursor:pointer}
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -454,7 +443,19 @@ header .tools .btn {
         </div>
 
         <!-- Ask our GPT -->
+        
+
+        <!-- Travel -->
+        <div class="card">
+          <div class="card-h">
+            <div class="title">✈️ Travel</div>
+            <div class="desc">Store flight, hotel, and ground confirmations.</div>
           </div>
+          <div class="card-c" id="travelSection"></div>
+        </div>
+      </div>
+
+      <!-- Right -->
       <div class="col gap16" id="detailsCol"></div>
     </div>
   </div>
@@ -651,6 +652,7 @@ let logoUrl = "";
     const openGptA = $("#openGpt");
     const setGptBtn = $("#setGptBtn");
     const gptHint = $("#gptHint");
+    const travelSection = $("#travelSection");
     const brandLogo  = $("#brandLogo");
 const setLogoBtn = $("#setLogoBtn");
 const logoDialog = $("#logoDialog");
@@ -1159,191 +1161,60 @@ sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
         detailsCol.append(card);
       });
     }
-function renderTravel(){
-  // nuke any prior travel card
-  const old = document.getElementById("travelCard");
-  if (old) old.remove();
 
-  // helper parsers
-  const getTraveler = (t) => {
-    // Labels like "Maria Lopez — ATL → SFO (DL 0750)"
-    const s = (t.label || "");
-    return (s.split("—")[0] || s.split("-")[0] || "Traveler").trim();
-  };
-  const parseLeg = (label) => {
-    // returns {from,to,flight} when possible
-    const m = /\b([A-Z]{3})\s*→\s*([A-Z]{3})\b.*\(([^)]+)\)/.exec(label || "");
-    return m ? { from:m[1], to:m[2], flight:m[3] } : {};
-  };
-  const dur = (a,b) => {
-    const mins = Math.max(0, Math.round((new Date(b)-new Date(a))/60000));
-    return `${Math.floor(mins/60)}h ${String(mins%60).padStart(2,"0")}m`;
-  };
-  const isUpcoming = (iso) => new Date(iso) > new Date();
+    function renderTravel(){
+      const root = travelSection;
+      root.innerHTML = "";
+      const add = document.createElement("button"); add.className="btn"; add.textContent="➕ Add travel";
+      add.onclick = ()=>{
+        t_type.value="flight"; t_label.value=""; t_conf.value=""; t_details.value="";
+        t_start.value=""; t_end.value="";
+        travelDialog.dataset.editId = ""; travelDialog.showModal();
+      };
+      root.append(add);
+      const spacer = document.createElement("div");
+spacer.className = "spacer";
+root.append(spacer);
 
-  // group flights by traveler then by date
-  const flights = travel
-    .filter(t => t.type === "flight")
-    .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
+      if(travel.length===0){
+        const div = document.createElement("div"); div.className="muted"; div.textContent="No travel saved.";
+        root.append(div); return;
+      }
 
-  const byTraveler = new Map();
-  for (const f of flights){
-    const name = getTraveler(f);
-    if (!byTraveler.has(name)) byTraveler.set(name, []);
-    byTraveler.get(name).push(f);
-  }
-
-  // card shell
-  const card = document.createElement("div");
-  card.className = "card";
-  card.id = "travelCard";
-
-  const head = document.createElement("div");
-  head.className = "card-h";
-  head.innerHTML = `
-    <div class="row">
-      <div class="title">✈️ Travel</div>
-      <div class="tools">
-        <button class="btn" id="t_add_btn">➕ Add travel</button>
-      </div>
-    </div>
-    <div class="desc">Grouped by traveler with connections & durations.</div>
-  `;
-  const body = document.createElement("div");
-  body.className = "card-c";
-
-  // empty state
-  if (flights.length === 0){
-    const empty = document.createElement("div");
-    empty.className = "muted";
-    empty.textContent = "No travel saved.";
-    body.append(empty);
-  }
-
-  // build groups
-  for (const [traveler, legs] of byTraveler){
-    // split by local date (PT for consistency with your app)
-    const days = new Map();
-    for (const leg of legs){
-      const k = fmtDate(leg.startISO); // already PT
-      if (!days.has(k)) days.set(k, []);
-      days.get(k).push(leg);
+      travel.forEach(t => {
+        const row = document.createElement("div");
+        row.className="item"; const inner=document.createElement("div"); inner.className="item-c";
+        const left = document.createElement("div");
+        const head = document.createElement("div"); head.className="title"; head.textContent = `[${t.type.toUpperCase()}] ${t.label}`;
+        const sub = document.createElement("div"); sub.className="muted"; sub.style.fontSize="12px";
+        const bits=[];
+        if(t.confirmation) bits.push(`Conf#: ${t.confirmation}`);
+        if(t.startISO) bits.push(`Start ${fmtDate(t.startISO)} ${fmtTime(t.startISO)}`);
+        if(t.endISO) bits.push(`End ${fmtDate(t.endISO)} ${fmtTime(t.endISO)}`);
+        sub.textContent = bits.join(" • ");
+        if(t.details){ const d=document.createElement("div"); d.style.fontSize="12px"; d.textContent=t.details; left.append(head, sub, d); }
+        else left.append(head, sub);
+        const tools = document.createElement("div"); tools.className="tools";
+        const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
+        edit.onclick = ()=>{
+          t_type.value=t.type; t_label.value=t.label; t_conf.value=t.confirmation||""; t_details.value=t.details||"";
+          t_start.value = t.startISO? new Date(t.startISO).toISOString().slice(0,16): "";
+          t_end.value = t.endISO? new Date(t.endISO).toISOString().slice(0,16): "";
+          travelDialog.dataset.editId = t.id; travelDialog.showModal();
+        };
+        const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
+   del.onclick = async () => {
+  if (!confirm("Delete this travel item?")) return;
+  try { await deleteTravel(t.id); }
+  catch(e){ console.error(e); alert("Delete failed."); }
+};
+        tools.append(edit, del);
+        inner.append(left, tools);
+        row.append(inner);
+        root.append(row);
+      });
     }
 
-    const group = document.createElement("div");
-    group.className = "travel-group";
-
-    // traveler header (collapsible)
-    const th = document.createElement("div");
-    th.className = "travel-head cursor";
-    th.innerHTML = `
-      <div class="row" style="gap:10px">
-        <div class="avatar">${traveler.slice(0,1).toUpperCase()}</div>
-        <div style="font-weight:700">${traveler}</div>
-      </div>
-      <div class="badge">toggle</div>
-    `;
-    const wrap = document.createElement("div"); // inner collapsible container
-
-    // render each day
-    for (const [dayLabel, items] of days){
-      items.sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
-
-      const day = document.createElement("div");
-      day.className = "travel-day";
-      day.textContent = dayLabel;
-      wrap.append(day);
-
-      items.forEach((t, idx) => {
-        const { from, to, flight } = parseLeg(t.label);
-        const seg = document.createElement("div");
-        seg.className = "seg";
-
-        // left column – big IATA
-        const left = document.createElement("div");
-        left.innerHTML = `<div class="iata">${from || ""} → ${to || ""}</div>
-                          <div class="meta">${t.confirmation? `Conf# ${t.confirmation}`: ""}</div>`;
-
-        // middle – times and details
-        const mid = document.createElement("div");
-      const timeLine = document.createElement("div");
-const hasEnd = !!t.endISO;
-timeLine.className = "time";
-timeLine.textContent = hasEnd
-  ? `${fmtTime(t.startISO)} – ${fmtTime(t.endISO)} • ${dur(t.startISO, t.endISO)}`
-  : `${fmtTime(t.startISO)} • duration n/a`;
-
-const meta = document.createElement("div");
-meta.className = "meta";
-meta.textContent = [flight, t.details].filter(Boolean).join(" • ");
-mid.append(timeLine, meta);
-        // right – actions / status
-        const right = document.createElement("div");
-        right.style.display = "flex";
-        right.style.gap = "8px";
-        if (isUpcoming(t.startISO)){
-          const b = document.createElement("span");
-          b.className = "badge next";
-          b.textContent = "Next up";
-          right.append(b);
-        }
-        const edit = document.createElement("button");
-        edit.className = "btn sm";
-        edit.textContent = "✏️";
-        edit.onclick = () => {
-          t_type.value = t.type;
-          t_label.value = t.label;
-          t_conf.value = t.confirmation || "";
-          t_details.value = t.details || "";
-          t_start.value = t.startISO ? new Date(t.startISO).toISOString().slice(0,16) : "";
-          t_end.value   = t.endISO   ? new Date(t.endISO).toISOString().slice(0,16)   : "";
-          travelDialog.dataset.editId = t.id;
-          travelDialog.showModal();
-        };
-        const del = document.createElement("button");
-        del.className = "btn sm";
-        del.textContent = "🗑️";
-        del.onclick = async () => {
-          if (!confirm("Delete this travel item?")) return;
-          try { await deleteTravel(t.id); } catch(e){ console.error(e); alert("Delete failed."); }
-        };
-        right.append(edit, del);
-
-        seg.append(left, mid, right);
-        wrap.append(seg);
-
-        // connection chip to next segment if same day & same airport chain
-       const next = items[idx+1];
-if (next && t.endISO) {
-  const lay = (new Date(next.startISO) - new Date(t.endISO)) / 60000;
-  const { from: nFrom } = parseLeg(next.label);
-  if (lay > 0 && lay < 15*60 && (to && nFrom && to === nFrom)){
-    const conn = document.createElement("div");
-    conn.className = "conn";
-    conn.textContent = `Connection ${Math.floor(lay/60)}h ${String(lay%60).padStart(2,"0")}m at ${to}`;
-    wrap.append(conn);
-  }
-}
-}); 
-    // collapse/expand
-    let open = true;
-    th.onclick = () => { open = !open; wrap.style.display = open ? "block" : "none"; };
-    group.append(th, wrap);
-    body.append(group);
-  }
-
-  // mount + wire Add button
-  card.append(head, body);
-  detailsCol.append(card);
-
-  const addBtn = document.getElementById("t_add_btn");
-  addBtn.onclick = () => {
-    t_type.value="flight"; t_label.value=""; t_conf.value=""; t_details.value="";
-    t_start.value=""; t_end.value="";
-    travelDialog.dataset.editId = "";
-    travelDialog.showModal();
-  };
-}
   function openMeetingDialog(m){
   meetingDialog.dataset.editId = m?.id || "";
   dlgTitle.textContent = m ? "Edit meeting" : "New meeting";
@@ -1401,30 +1272,18 @@ payload.updatedAtMs = now;
   }
 }
 
-function renderGpt(){
+    function renderGpt(){
   const has = !!gptUrl;
   if (has){
     openGptA.href = gptUrl;
-    openGptA.target = "_blank";
-    openGptA.rel = "noreferrer";
-    openGptA.style.pointerEvents = "";
-    openGptA.removeAttribute("aria-disabled");
-
-    // 🔽 class toggle fix
-    openGptA.classList.remove("sm");
-    openGptA.classList.add("lg");
-
+    openGptA.removeAttribute('disabled');
+    openGptA.classList.add('lg');          // make it bigger
     gptHint.style.display = "none";
-    setGptBtn.style.display = "none";
-  } else {
-    openGptA.removeAttribute("href");
-    openGptA.style.pointerEvents = "none";
-    openGptA.setAttribute("aria-disabled","true");
-
-    // 🔽 class toggle fix
-    openGptA.classList.remove("lg");
-    openGptA.classList.add("sm");
-
+    setGptBtn.style.display = "none";      // hide Set Link when set
+  }else{
+    openGptA.href = "#";
+    openGptA.setAttribute('disabled', ''); // no link yet
+    openGptA.classList.remove('lg');
     gptHint.style.display = "block";
     setGptBtn.style.display = "inline-flex";
   }
