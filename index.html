@@ -634,6 +634,18 @@ const fmtDate = (iso) =>
   const A = parts(aISO), B = parts(bISO);
   return A.year===B.year && A.month===B.month && A.day===B.day;
 };
+    const TBD_ANCHOR_YMD = '2025-09-02'; // change if you want a different date (PT)
+
+function ymdInTZ(iso){
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
+  }).formatToParts(new Date(iso))
+    .reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+function isAnchorDay(iso){
+  return ymdInTZ(iso) === TBD_ANCHOR_YMD;
+}
 function displayLocation(it){
   if (!it || typeof it !== 'object') return '';
   const keys = [
@@ -1023,6 +1035,12 @@ function daysFromCalendar(){
     const cur = byDay.get(k);
     if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(k, x.startISO);
   });
+
+  // ensure the anchor day appears if we have any Date TBD meetings
+  if (meetings.some(m => m.dateTBD) && !byDay.has(TBD_ANCHOR_YMD)) {
+    byDay.set(TBD_ANCHOR_YMD, new Date('2025-09-02T12:00:00Z').toISOString());
+  }
+
   return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b));
 }
  function shiftDay(dir){
@@ -1271,10 +1289,19 @@ function renderHourly(){
 
 function renderDetails(){
   detailsCol.innerHTML = "";
-  const dayMeetings = meetings
-    .filter(m => sameDay(m.startISO, activeDate))
-    .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
-
+const dayMeetings = meetings
+  .filter(m =>
+    // normal same-day meetings
+    sameDay(m.startISO, activeDate) ||
+    // ALSO include Date TBD meetings when viewing the anchor day
+    (m.dateTBD && isAnchorDay(activeDate))
+  )
+  .sort((a,b) => {
+    // Optional: show Date TBD first
+    if (a.dateTBD && !b.dateTBD) return -1;
+    if (!a.dateTBD && b.dateTBD) return 1;
+    return new Date(a.startISO) - new Date(b.startISO);
+  });
   if(dayMeetings.length===0){
     const card = document.createElement("div"); card.className="card";
     card.innerHTML = `<div class="card-h"><div class="title">No meetings this day</div></div>
@@ -1303,7 +1330,11 @@ function renderDetails(){
     else if (m.timeTBD) timePart = "TBD time";
     else timePart = `${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
 
-    rightT.textContent = `${fmtDate(m.startISO)} • ${timePart}`;
+    const dateLabel =
+  (m.dateTBD && isAnchorDay(activeDate)) ? fmtDate(activeDate) :
+  m.dateTBD ? 'TBD' : fmtDate(m.startISO);
+
+rightT.textContent = `${dateLabel} • ${timePart}`;
     t.append(leftT, rightT);
     head.append(t);
 
