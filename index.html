@@ -388,6 +388,8 @@ header .tools .btn {
   white-space: normal;
   max-width: 100%;
 }  
+    #rowDateOnly.hidden { display:none; }
+.chip input { margin-right:6px; }
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -526,10 +528,20 @@ header .tools .btn {
         <input id="m_location" placeholder="Location" />
         <input id="m_booth" placeholder="Booth" />
       </div>
+    <div class="two" id="rowDateTimes">
+  <input id="m_start" type="datetime-local" />
+  <input id="m_end"   type="datetime-local" />
+</div>
       <div class="two">
-        <input id="m_start" type="datetime-local" />
-        <input id="m_end" type="datetime-local" />
-      </div>
+  <label class="chip"><input id="m_dateTBD" type="checkbox"> Date TBD</label>
+  <label class="chip"><input id="m_timeTBD" type="checkbox"> Time TBD</label>
+</div>
+
+<!-- NEW: date-only when time is TBD -->
+<div class="two hidden" id="rowDateOnly">
+  <input id="m_dateOnly" type="date" />
+  <div></div>
+</div>
       <textarea id="m_desc" placeholder="Description / goals"></textarea>
 
       <div class="kicker">Attendees</div>
@@ -655,6 +667,9 @@ function displayLocation(it){
   return ''; // <-- no booth fallback
 }
 // (Optional) simple HTML escape since we'll inject into pill HTML
+
+
+// Basic HTML escape for pill text
 function escapeHtml(s){
   return (s||'').replace(/[&<>"']/g, m => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -750,7 +765,11 @@ const logoFile  = $("#logoFile");
     const m_start = $("#m_start");
     const m_end = $("#m_end");
     const m_desc = $("#m_desc");
-   
+  const rowDateTimes = $("#rowDateTimes");
+const m_dateTBD = $("#m_dateTBD");
+const m_timeTBD = $("#m_timeTBD");
+const rowDateOnly = $("#rowDateOnly");
+const m_dateOnly = $("#m_dateOnly"); 
 const attendeeEditorRoot = $("#attendeeEditor");
 const addAttendeeBtn = $("#addAttendeeBtn");
 let currentAttendees = [];
@@ -956,10 +975,9 @@ function collectAttendeesFromEditor(){
     const gptInput = $("#gptInput");
     const gptSave = $("#gptSave");
     const gptCancel = $("#gptCancel");
-
+const t_label = $("#t_label");
     const travelDialog = $("#travelDialog");
     const t_type = $("#t_type");
-    const t_label = $("#t_label");
     const t_conf = $("#t_conf");
     const t_details = $("#t_details");
     const t_start = $("#t_start");
@@ -967,18 +985,20 @@ function collectAttendeesFromEditor(){
     const t_save = $("#t_save");
     const t_cancel = $("#t_cancel");
 
- function daysFromCalendar(){
-   const fmt = new Intl.DateTimeFormat('en-CA', {
-     timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
-   });
-   const byDay = new Map(); // key: 'YYYY-MM-DD' (PT) -> earliest ISO on that day
-   [...meetings, ...sessions].forEach(x => {
-     const k = fmt.format(new Date(x.startISO));
-     const cur = byDay.get(k);
-     if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(k, x.startISO);
-   });
-   return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b));
- }
+function daysFromCalendar(){
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
+  });
+  const byDay = new Map();
+
+  // include meetings that have a date (dateTBD=false) + all sessions
+  [...meetings.filter(m => !m.dateTBD), ...sessions].forEach(x => {
+    const k = fmt.format(new Date(x.startISO));
+    const cur = byDay.get(k);
+    if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(k, x.startISO);
+  });
+  return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b));
+}
  function shiftDay(dir){
    const days = daysFromCalendar();
   const idx = days.findIndex(d => sameDay(d, activeDate)); // both ISO strings
@@ -1019,13 +1039,58 @@ function itemsForDay(iso){
 
   return [...m, ...s].sort((a,b)=> new Date(a.startISO) - new Date(b.startISO));
 }
-   function renderAgenda(){
+  function renderAgenda(){
   agendaList.innerHTML = "";
+
+  // Show unscheduled (date TBD) at the top
+  const unscheduled = meetings.filter(m => m.dateTBD);
+  if (unscheduled.length){
+    const hdr = document.createElement("div");
+    hdr.className = "kicker";
+    hdr.textContent = "Unscheduled (TBD date)";
+    agendaList.append(hdr);
+
+    unscheduled.forEach(m => {
+      const card = document.createElement("div"); card.className = "item meeting";
+      const c = document.createElement("div"); c.className = "item-c";
+      const left = document.createElement("div");
+
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = `TBD • ${m.title}`;
+
+      const sub = document.createElement("div");
+      sub.className = "sub";
+      const loc = displayLocation(m);
+      const booth = m.booth ? `Booth ${m.booth}` : "";
+      sub.textContent = [loc, booth].filter(Boolean).join(" • ");
+
+      left.append(title, sub);
+
+      const tools = document.createElement("div"); tools.className="tools";
+      const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
+      edit.onclick = () => openMeetingDialog(m);
+      const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
+      del.onclick = async () => {
+        if (!confirm("Delete this meeting?")) return;
+        try { await deleteMeeting(m.id); } catch(e){ console.error(e); alert("Delete failed."); }
+      };
+      tools.append(edit, del);
+
+      c.append(left, tools);
+      card.append(c);
+      agendaList.append(card);
+    });
+
+    const hr = document.createElement("div"); hr.className = "spacer";
+    agendaList.append(hr);
+  }
+
   const items = itemsForDay(activeDate);
   if(items.length === 0){
     const div = document.createElement("div");
     div.className = "muted";
-    div.textContent = "No items for this date.";
+    div.textContent = "No scheduled items for this date.";
     agendaList.append(div);
     return;
   }
@@ -1045,14 +1110,17 @@ function itemsForDay(iso){
     const left = document.createElement("div");
     const title = document.createElement("div");
     title.className = "title";
-    title.textContent = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)} • ${it.title}`;
+    const tLabel = (it.dateTBD || it.timeTBD)
+      ? "TBD"
+      : `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
+    title.textContent = `${tLabel} • ${it.title}`;
 
     const sub = document.createElement("div");
     sub.className = "sub";
-  const loc = displayLocation(it);
-sub.textContent = loc; 
+    const loc = displayLocation(it);
+    const booth = it.booth ? `Booth ${it.booth}` : "";
+    sub.textContent = [loc, booth].filter(Boolean).join(" • ");
 
-    // ⬇️ THIS WAS MISSING
     left.append(title, sub);
 
     const tools = document.createElement("div");
@@ -1083,67 +1151,87 @@ sub.textContent = loc;
     agendaList.append(card);
   });
 }
-
 function renderHourly(){
   hourlyGrid.innerHTML = "";
-  const items = itemsForDay(activeDate);       // uses sameDay() in PT already
+  const items = itemsForDay(activeDate);
 
   const wrap = document.createElement("div");
   wrap.className = "hour-grid";
 
-  const startHour = 7;        // 7 AM PT
-const hoursToShow = 17;     // 7am–11pm PT so After Hours pills appear
+  // --- TBD time pills for meetings on this date ---
+  const tbdToday = meetings.filter(
+    m => !m.dateTBD && m.timeTBD && sameDay(m.startISO, activeDate)
+  );
+  if (tbdToday.length){
+    const row  = document.createElement("div"); row.className  = "hour-row";
+    const lbl  = document.createElement("div"); lbl.className  = "hour-label"; lbl.textContent = "TBD";
+    const cell = document.createElement("div"); cell.className = "hour-cell";
 
+    const box = document.createElement("div");
+    box.style.display = "flex"; box.style.flexWrap = "wrap"; box.style.gap = "8px";
+
+    tbdToday.forEach(it => {
+      const pill = document.createElement("span");
+      pill.className = "meeting-pill meeting";
+      const loc  = displayLocation(it);
+      const meta = loc ? `TBD • ${escapeHtml(loc)}` : "TBD";
+      pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
+      box.append(pill);
+    });
+
+    cell.append(box);
+    row.append(lbl, cell);
+    wrap.append(row);
+  }
+
+  // --- Hourly grid (PT) ---
+  const startHour = 7;        // 7 AM PT
+  const hoursToShow = 17;     // 7am–11pm
+
+  const labelFromHour = (hr) => {
+    const h12 = ((hr + 11) % 12) + 1;
+    const ampm = hr < 12 ? "AM" : "PM";
+    return `${h12.toString().padStart(2,"0")}:00 ${ampm}`;
+  };
 
   for (let i = 0; i < hoursToShow; i++){
     const hr = startHour + i;
-    const row = document.createElement("div");
-    row.className = "hour-row";
-function labelFromHour(hr, use12 = true){
-  if (use12){
-    const h12 = ((hr + 11) % 12) + 1; // 0..23 -> 1..12
-    const ampm = hr < 12 ? "AM" : "PM";
-    return `${h12.toString().padStart(2,"0")}:00 ${ampm}`;
-  }
-  return `${hr.toString().padStart(2,"0")}:00`;
-}
-    // Label strictly in PT
- const lbl = document.createElement("div");
-lbl.className = "hour-label";
-lbl.textContent = labelFromHour(hr); // shows 07:00 AM, 08:00 AM, ... in PT
 
-    const cell = document.createElement("div");
-    cell.className = "hour-cell";
+    const row  = document.createElement("div"); row.className  = "hour-row";
+    const lbl  = document.createElement("div"); lbl.className  = "hour-label"; lbl.textContent = labelFromHour(hr);
+    const cell = document.createElement("div"); cell.className = "hour-cell";
 
-    const hourStartMin = hr * 60;
-    const hourEndMin   = hourStartMin + 60;
+    const slot = items
+      .filter(it => {
+        if (it.dateTBD || it.timeTBD) return false;       // skip unscheduled here
+        const s = ptMinutes(it.startISO);                 // minutes since midnight PT
+        return Math.floor(s / 60) === hr;                 // bucket by START hour only
+      })
+      .sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
 
-    // Decide if an item occupies this PT hour slot
-const slot = items.filter(it => {
-  const s = ptMinutes(it.startISO);   // minutes since midnight PT
-  return Math.floor(s / 60) === hr;   // bucket by START hour only
-}).sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
     if (slot.length === 0){
       const g = document.createElement("div");
       g.className = "ghost";
       cell.append(g);
     } else {
       const box = document.createElement("div");
-      box.style.display="flex"; box.style.flexWrap="wrap"; box.style.gap="8px";
+      box.style.display = "flex"; box.style.flexWrap = "wrap"; box.style.gap = "8px";
+
       slot.forEach(it => {
         const pill = document.createElement("span");
         pill.className = "meeting-pill";
-        if (it.kind === 'session') pill.classList.add('session'); // keeps your purple style
-        else if (it.kind === 'meeting') pill.classList.add('meeting');
-        if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) {
-  pill.classList.add('afterhours');
-}
-const loc = displayLocation(it);
-const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
-const meta = loc ? `${timeRange} • ${escapeHtml(loc)}` : timeRange;
-pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`
-            box.append(pill);          // <-- missing
-  });
+        if (it.kind === "session") pill.classList.add("session");
+        else if (it.kind === "meeting") pill.classList.add("meeting");
+        if (it.kind === "session" && (it.afterHours || it.category === "afterHours")){
+          pill.classList.add("afterhours");
+        }
+
+        const loc = displayLocation(it);
+        const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
+        const meta = loc ? `${timeRange} • ${escapeHtml(loc)}` : timeRange;
+        pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
+        box.append(pill);
+      });
 
       cell.append(box);
     }
@@ -1154,6 +1242,7 @@ pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">$
 
   hourlyGrid.append(wrap);
 }
+
 function renderDetails(){
   detailsCol.innerHTML = "";
   const dayMeetings = meetings
@@ -1169,35 +1258,56 @@ function renderDetails(){
   }
 
   dayMeetings.forEach(m => {
-    const card = document.createElement("div"); card.className = "card";
-    const head = document.createElement("div"); head.className = "card-h";
+    const card = document.createElement("div"); 
+    card.className = "card";
 
-    const t = document.createElement("div"); t.className = "title row";
-    const left = document.createElement("span"); left.textContent = m.title;
-    const right = document.createElement("span"); right.className = "muted";
-    right.textContent = `${fmtDate(m.startISO)} • ${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
-    t.append(left, right);
+    const head = document.createElement("div"); 
+    head.className = "card-h";
+
+    // Title row
+    const t = document.createElement("div"); 
+    t.className = "title row";
+    const leftT = document.createElement("span"); 
+    leftT.textContent = m.title;
+    const rightT = document.createElement("span"); 
+    rightT.className = "muted";
+
+    let timePart;
+    if (m.dateTBD) timePart = "TBD date";
+    else if (m.timeTBD) timePart = "TBD time";
+    else timePart = `${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
+
+    rightT.textContent = `${fmtDate(m.startISO)} • ${timePart}`;
+    t.append(leftT, rightT);
     head.append(t);
 
+    // Sub-desc (duration + location)
     const desc = document.createElement("div");
     desc.className = "desc";
     const where = displayLocation(m);
-    desc.textContent = `${hoursBetween(m.startISO, m.endISO).toFixed(1)} hrs${where ? ` • ${where}` : ''}`;
+    const dur = (!m.dateTBD && !m.timeTBD) ? `${hoursBetween(m.startISO, m.endISO).toFixed(1)} hrs` : "TBD";
+    desc.textContent = where ? `${dur} • ${where}` : dur;
     head.append(desc);
 
-    const c = document.createElement("div"); c.className = "card-c";
+    // Body
+    const c = document.createElement("div"); 
+    c.className = "card-c";
+
     const inner = document.createElement("div");
     inner.className = "details-grid";
     inner.style.gridTemplateColumns="1fr 2fr";
     inner.style.gap="16px";
 
+    // Left column: description + talking points + prep
     const leftCol = document.createElement("div");
     if(m.description){ const p=document.createElement("p"); p.textContent=m.description; leftCol.append(p); }
-    if(m.talkingPoints){ const k=document.createElement("div"); k.className="kicker"; k.textContent="Suggested talking points";
+    if(m.talkingPoints){ 
+      const k=document.createElement("div"); k.className="kicker"; k.textContent="Suggested talking points";
       const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
       box.textContent=m.talkingPoints; leftCol.append(k, box);
     }
-    if(m.prepChecklist){ const k=document.createElement("div"); k.className="kicker"; k.textContent="Prep checklist";
+    if(m.prepChecklist){ 
+      const k=document.createElement("div"); k.className="kicker"; k.textContent="Prep checklist";
       const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
       box.textContent=m.prepChecklist; leftCol.append(k, box);
     }
@@ -1205,6 +1315,7 @@ function renderDetails(){
     edit.onclick = ()=> openMeetingDialog(m);
     leftCol.append(edit);
 
+    // Right column: attendees
     const rightCol = document.createElement("div");
     const ak = document.createElement("div"); ak.className="kicker"; ak.textContent="Attendees";
     rightCol.append(ak);
@@ -1238,14 +1349,32 @@ function renderDetails(){
       rightCol.append(wrap);
     });
 
-    // ✅ keep these inside the forEach
     inner.append(rightCol, leftCol);
     c.append(inner);
     card.append(head, c);
     detailsCol.append(card);
   });
 }
+function updateTbdUI(){
+  const dateTBD = m_dateTBD.checked;
+  const timeTBD = m_timeTBD.checked;
 
+  if (dateTBD){
+    // No date, no time
+    rowDateTimes.classList.add("hidden");
+    rowDateOnly.classList.add("hidden");
+  } else if (timeTBD){
+    // Date known, time unknown
+    rowDateTimes.classList.add("hidden");
+    rowDateOnly.classList.remove("hidden");
+  } else {
+    // Normal
+    rowDateTimes.classList.remove("hidden");
+    rowDateOnly.classList.add("hidden");
+  }
+}
+m_dateTBD.onchange = updateTbdUI;
+m_timeTBD.onchange = updateTbdUI;
     function renderTravel(){
       const root = travelSection;
       root.innerHTML = "";
@@ -1306,49 +1435,96 @@ root.append(spacer);
   m_location.value = m?.location || "";
   m_booth.value = m?.booth || "";
 
-  // Use local time for inputs
   const toLocalInput = (d) => {
     const dt = new Date(d);
     dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
     return dt.toISOString().slice(0,16);
   };
+
+  // Default datetimes (normal case)
   m_start.value = toLocalInput(m ? m.startISO : new Date());
   m_end.value   = toLocalInput(m ? m.endISO   : new Date(Date.now()+60*60*1000));
   m_desc.value  = m?.description || "";
 
-  // Load attendees into editor
+  // NEW: set TBD flags from doc (booleans)
+  m_dateTBD.checked = !!m?.dateTBD;
+  m_timeTBD.checked = !!m?.timeTBD;
+
+  // NEW: if time-only TBD, seed the date picker from startISO (or today)
+  if (!m_dateTBD.checked && m_timeTBD.checked){
+    const base = m?.startISO ? new Date(m.startISO) : new Date();
+    // YYYY-MM-DD for the <input type="date">
+    const yyyy = base.getFullYear();
+    const mm = String(base.getMonth()+1).padStart(2,'0');
+    const dd = String(base.getDate()).padStart(2,'0');
+    m_dateOnly.value = `${yyyy}-${mm}-${dd}`;
+  } else {
+    m_dateOnly.value = "";
+  }
+
+  // NEW: reflect correct rows
+  updateTbdUI();
+
+  // Load attendees (unchanged)
   currentAttendees = Array.isArray(m?.attendees) ? structuredClone(m.attendees) : [];
   renderAttendeeEditor(currentAttendees);
-
-  // Add attendee button
   addAttendeeBtn.onclick = () => {
     currentAttendees = [...currentAttendees, blankAttendee()];
     renderAttendeeEditor(currentAttendees);
   };
 
+
   meetingDialog.showModal();
 }
 async function saveMeetingFromDialog(){
   const id = meetingDialog.dataset.editId;
-  const payload = {
+  const dateTBD = m_dateTBD.checked;
+  const timeTBD = m_timeTBD.checked;
+
+  const base = {
     id: id || uid(),
     title: m_title.value.trim(),
     location: m_location.value.trim(),
     booth: m_booth.value.trim(),
-    startISO: new Date(m_start.value).toISOString(),
-    endISO:   new Date(m_end.value).toISOString(),
     attendees: collectAttendeesFromEditor(),
     description: m_desc.value.trim(),
+    dateTBD,
+    timeTBD
   };
-  if (!payload.title){ alert("Title required"); return; }
-  if (new Date(payload.endISO) <= new Date(payload.startISO)){
-    alert("End time must be after start time."); return;
+  if (!base.title){ alert("Title required"); return; }
+
+  // Decide how we store timing
+  if (dateTBD){
+    // Unknown date/time: keep an anchor so Firestore orderBy('startISO') works,
+    // but we will explicitly ignore dateTBD in all day calculations.
+    base.startISO = new Date(0).toISOString();            // Jan 1, 1970
+    base.endISO   = new Date(60*60*1000).toISOString();   // +1h
+    base.dateOnly = "";                                    // none
+  } else if (timeTBD){
+    // Date known, time unknown: we store midnight for grouping by day,
+    // and render "TBD" instead of the time.
+    if (!m_dateOnly.value){ alert("Pick a date (or mark Date TBD)."); return; }
+    const d = new Date(m_dateOnly.value);                 // local midnight
+    base.startISO = d.toISOString();
+    base.endISO   = new Date(d.getTime() + 60*60*1000).toISOString(); // +1h
+    base.dateOnly = m_dateOnly.value;                     // 'YYYY-MM-DD' for convenience
+  } else {
+    // Normal meeting
+    const start = new Date(m_start.value);
+    const end   = new Date(m_end.value);
+    if (!(m_start.value && m_end.value)){ alert("Start and end are required (or mark TBD)."); return; }
+    if (end <= start){ alert("End time must be after start time."); return; }
+    base.startISO = start.toISOString();
+    base.endISO   = end.toISOString();
+    base.dateOnly = "";
   }
-const now = Date.now();
-if (!id) payload.createdAtMs = now;
-payload.updatedAtMs = now;
-   try {
-    await upsertMeeting(payload);   // <-- write to subcollection
+
+  const now = Date.now();
+  if (!id) base.createdAtMs = now;
+  base.updatedAtMs = now;
+
+  try {
+    await upsertMeeting(base);
     meetingDialog.close();
   } catch (e){
     console.error(e);
