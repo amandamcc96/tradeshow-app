@@ -675,6 +675,32 @@ function escapeHtml(s){
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[m]));
 }
+    function parseBullets(text){
+  if (!text) return [];
+  return text
+    .split(/\r?\n/)
+    .map(s => s.replace(/^\s*([•*-])\s+/, '').trim()) // strip leading bullet markers
+    .filter(Boolean);
+}
+
+function renderNotes(text){
+  const items = parseBullets(text);
+  if (items.length >= 2 || /^(\s*[•*-]\s+)/.test(text)) {
+    const ul = document.createElement('ul');
+    ul.style.margin = '0';
+    ul.style.paddingLeft = '18px';
+    items.forEach(t => {
+      const li = document.createElement('li');
+      li.textContent = t;
+      ul.append(li);
+    });
+    return ul;
+  } else {
+    const p = document.createElement('p');
+    p.textContent = (text||'').trim();
+    return p;
+  }
+}
     // seed
     const seedDate = (()=>{
       const now = new Date();
@@ -1300,17 +1326,19 @@ function renderDetails(){
 
     // Left column: description + talking points + prep
     const leftCol = document.createElement("div");
-    if(m.description){ const p=document.createElement("p"); p.textContent=m.description; leftCol.append(p); }
-    if(m.talkingPoints){ 
-      const k=document.createElement("div"); k.className="kicker"; k.textContent="Suggested talking points";
-      const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
-      box.textContent=m.talkingPoints; leftCol.append(k, box);
-    }
-    if(m.prepChecklist){ 
-      const k=document.createElement("div"); k.className="kicker"; k.textContent="Prep checklist";
-      const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
-      box.textContent=m.prepChecklist; leftCol.append(k, box);
-    }
+    if (m.description) { leftCol.append(renderNotes(m.description)); }
+  if (m.talkingPoints){
+  const k=document.createElement("div"); k.className="kicker"; k.textContent="Suggested talking points";
+  const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
+  box.append(renderNotes(m.talkingPoints));
+  leftCol.append(k, box);
+}
+    if (m.prepChecklist){
+  const k=document.createElement("div"); k.className="kicker"; k.textContent="Prep checklist";
+  const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
+  box.append(renderNotes(m.prepChecklist));
+  leftCol.append(k, box);
+}
     const edit = document.createElement("button"); edit.className="btn"; edit.textContent="✏️ Edit details";
     edit.onclick = ()=> openMeetingDialog(m);
     leftCol.append(edit);
