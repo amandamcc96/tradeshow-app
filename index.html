@@ -623,14 +623,37 @@ const fmtDate = (iso) =>
   return A.year===B.year && A.month===B.month && A.day===B.day;
 };
 function displayLocation(it){
-  const fields = ['location','stage','venue','room','place','where','stageName','locationNote'];
-  for (const k of fields){
-    const v = it && typeof it[k] === 'string' ? it[k].trim() : '';
-    if (v) return v;
+  if (!it || typeof it !== 'object') return '';
+  const keys = [
+    'location','Location',
+    'stage','Stage',
+    'stageName','stage_name','StageName',
+    'venue','Venue',
+    'room','Room',
+    'place','Place',
+    'where','Where',
+    'locationNote','location_name','LocationName','LocationNote',
+    'space','Space','area','Area'
+  ];
+  const pickString = (v) => {
+    if (typeof v === 'string') return v.trim();
+    if (Array.isArray(v)) {
+      return v.map(x => (typeof x === 'string' ? x.trim()
+                 : x && typeof x === 'object' ? (x.name || x.label || '').trim()
+                 : ''))
+              .filter(Boolean).join(' • ');
+    }
+    if (v && typeof v === 'object') return (v.name || v.label || v.location || '').toString().trim();
+    return '';
+  };
+  for (const k of keys){
+    if (k in it){
+      const s = pickString(it[k]);
+      if (s) return s;
+    }
   }
-  return '';
+  return ''; // <-- no booth fallback
 }
-
 // (Optional) simple HTML escape since we'll inject into pill HTML
 function escapeHtml(s){
   return (s||'').replace(/[&<>"']/g, m => ({
@@ -1026,9 +1049,8 @@ function itemsForDay(iso){
 
     const sub = document.createElement("div");
     sub.className = "sub";
-    const loc = displayLocation(it);
-    const booth = it.booth ? `Booth ${it.booth}` : "";
-    sub.textContent = [loc, booth].filter(Boolean).join(" • ");
+  const loc = displayLocation(it);
+sub.textContent = loc; 
 
     // ⬇️ THIS WAS MISSING
     left.append(title, sub);
@@ -1116,13 +1138,13 @@ const slot = items.filter(it => {
         if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) {
   pill.classList.add('afterhours');
 }
-        const loc = displayLocation(it);
+const loc = displayLocation(it);
 const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
 const meta = loc ? `${timeRange} • ${escapeHtml(loc)}` : timeRange;
+pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`
+            box.append(pill);          // <-- missing
+  });
 
-pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
-        box.append(pill);
-      });
       cell.append(box);
     }
 
@@ -1146,83 +1168,92 @@ pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">$
         return;
       }
 
-      dayMeetings.forEach(m => {
-        const card = document.createElement("div"); card.className="card";
-        const head = document.createElement("div"); head.className="card-h";
-        const t = document.createElement("div"); t.className="title row";
-        const left = document.createElement("span"); left.textContent = m.title;
-        const right = document.createElement("span"); right.className="muted";
-        right.textContent = `${fmtDate(m.startISO)} • ${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
-        t.append(left, right);
-        const desc = document.createElement("div"); desc.className="desc";
-        desc.textContent = `${hoursBetween(m.startISO, m.endISO).toFixed(1)} hrs • ${m.location || ""}${m.booth?` • Booth ${m.booth}`:""}`;
-        head.append(t, desc);
+ dayMeetings.forEach(m => {
+  const card = document.createElement("div"); card.className = "card";
 
-        const c = document.createElement("div"); c.className="card-c";
-        const inner = document.createElement("div");
-inner.className = "details-grid";; inner.style.gridTemplateColumns="1fr 2fr"; inner.style.gap="16px";
+  const head = document.createElement("div"); head.className = "card-h";
 
-        const leftCol = document.createElement("div");
-        if(m.description){
-          const p = document.createElement("p"); p.textContent = m.description; leftCol.append(p);
-        }
-        if(m.talkingPoints){
-          const k = document.createElement("div"); k.className="kicker"; k.textContent = "Suggested talking points";
-          const box = document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
-          box.textContent = m.talkingPoints; leftCol.append(k, box);
-        }
-        if(m.prepChecklist){
-          const k = document.createElement("div"); k.className="kicker"; k.textContent = "Prep checklist";
-          const box = document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
-          box.textContent = m.prepChecklist; leftCol.append(k, box);
-        }
-        const edit = document.createElement("button"); edit.className="btn"; edit.textContent="✏️ Edit details";
-        edit.onclick = ()=> openMeetingDialog(m);
-        leftCol.append(edit);
+  // Title row
+  const t = document.createElement("div"); t.className = "title row";
+  const left = document.createElement("span"); left.textContent = m.title;
+  const right = document.createElement("span"); right.className = "muted";
+  right.textContent = `${fmtDate(m.startISO)} • ${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
+  t.append(left, right);
+  head.append(t);
 
-        const rightCol = document.createElement("div");
-        const ak = document.createElement("div"); ak.className="kicker"; ak.textContent="Attendees";
-        rightCol.append(ak);
-        (m.attendees||[]).forEach(a => {
-          const wrap = document.createElement("div"); wrap.className="attendee";
-          const row = document.createElement("div"); row.className="row";
-          const who = document.createElement("div"); who.className="row"; who.style.gap="12px";
-          const av = document.createElement("div");
-av.className = "avatar";
-if (a.photoUrl) {
-const img = document.createElement("img");
-img.src = a.photoUrl;
-img.alt = a.name || "Photo";
-img.className = "avatar-img";
-av.append(img);
-} else {
-  av.textContent = (a.name || "?").slice(0,1).toUpperCase();
-}
-          const meta = document.createElement("div");
-const nm = document.createElement("div");
-nm.className = "name";
-nm.textContent = a.name;
+  // One desc line (duration + location), defined once
+  const desc = document.createElement("div");
+  desc.className = "desc";
+  const where = displayLocation(m);
+  desc.textContent = `${hoursBetween(m.startISO, m.endISO).toFixed(1)} hrs${where ? ` • ${where}` : ''}`;
+  head.append(desc);
 
-const sub = document.createElement("div");
-sub.className = "role";
-sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
-        
-          meta.append(nm, sub);
-          who.append(av, meta);
-          const link = document.createElement("a"); link.className="link"; link.textContent="LinkedIn"; link.target="_blank"; link.rel="noreferrer";
-          if(a.linkedin) link.href=a.linkedin; else { link.href="#"; link.style.pointerEvents="none"; link.style.opacity=".5"; }
-          row.append(who, link);
-          if(a.notes){ const notes=document.createElement("div"); notes.style.marginTop="6px"; notes.textContent=a.notes; wrap.append(row, notes); }
-          else wrap.append(row);
-          rightCol.append(wrap);
-        });
+  const c = document.createElement("div"); c.className = "card-c";
+  const inner = document.createElement("div");
+  inner.className = "details-grid";
+  inner.style.gridTemplateColumns="1fr 2fr";
+  inner.style.gap="16px";
 
-      inner.append(rightCol, leftCol);
-        c.append(inner);
-        card.append(head, c);
-        detailsCol.append(card);
-      });
+  // Left column (notes)
+  const leftCol = document.createElement("div");
+  if(m.description){
+    const p = document.createElement("p");
+    p.textContent = m.description;
+    leftCol.append(p);
+  }
+  if(m.talkingPoints){
+    const k = document.createElement("div"); k.className="kicker"; k.textContent = "Suggested talking points";
+    const box = document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
+    box.textContent = m.talkingPoints; leftCol.append(k, box);
+  }
+  if(m.prepChecklist){
+    const k = document.createElement("div"); k.className="kicker"; k.textContent = "Prep checklist";
+    const box = document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
+    box.textContent = m.prepChecklist; leftCol.append(k, box);
+  }
+  const edit = document.createElement("button"); edit.className="btn"; edit.textContent="✏️ Edit details";
+  edit.onclick = ()=> openMeetingDialog(m);
+  leftCol.append(edit);
+
+  // Right column (attendees)
+  const rightCol = document.createElement("div");
+  const ak = document.createElement("div"); ak.className="kicker"; ak.textContent="Attendees";
+  rightCol.append(ak);
+  (m.attendees||[]).forEach(a => {
+    const wrap = document.createElement("div"); wrap.className="attendee";
+    const row = document.createElement("div"); row.className="row";
+    const who = document.createElement("div"); who.className="row"; who.style.gap="12px";
+    const av = document.createElement("div"); av.className = "avatar";
+    if (a.photoUrl) {
+      const img = document.createElement("img"); img.src = a.photoUrl; img.alt = a.name || "Photo"; img.className = "avatar-img";
+      av.append(img);
+    } else {
+      av.textContent = (a.name || "?").slice(0,1).toUpperCase();
     }
+    const meta = document.createElement("div");
+    const nm = document.createElement("div"); nm.className = "name"; nm.textContent = a.name;
+    const sub = document.createElement("div"); sub.className = "role"; sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
+    meta.append(nm, sub);
+    who.append(av, meta);
+
+    const link = document.createElement("a"); link.className="link"; link.textContent="LinkedIn"; link.target="_blank"; link.rel="noreferrer";
+    if(a.linkedin) link.href=a.linkedin; else { link.href="#"; link.style.pointerEvents="none"; link.style.opacity=".5"; }
+
+    row.append(who, link);
+    if(a.notes){
+      const notes=document.createElement("div"); notes.style.marginTop="6px"; notes.textContent=a.notes; 
+      wrap.append(row, notes);
+    } else {
+      wrap.append(row);
+    }
+    rightCol.append(wrap);
+  });
+} 
+  inner.append(rightCol, leftCol);
+  c.append(inner);
+  card.append(head, c);
+  detailsCol.append(card);
+});
 
     function renderTravel(){
       const root = travelSection;
