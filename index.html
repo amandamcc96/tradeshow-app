@@ -1154,106 +1154,97 @@ pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">$
 
   hourlyGrid.append(wrap);
 }
-    function renderDetails(){
-      detailsCol.innerHTML = "";
-      const dayMeetings = meetings
-        .filter(m => sameDay(m.startISO, activeDate))
-        .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
+function renderDetails(){
+  detailsCol.innerHTML = "";
+  const dayMeetings = meetings
+    .filter(m => sameDay(m.startISO, activeDate))
+    .sort((a,b)=> new Date(a.startISO)-new Date(b.startISO));
 
-      if(dayMeetings.length===0){
-        const card = document.createElement("div"); card.className="card";
-        card.innerHTML = `<div class="card-h"><div class="title">No meetings this day</div></div>
-                          <div class="card-c muted">Add one using the button on the left.</div>`;
-        detailsCol.append(card);
-        return;
+  if(dayMeetings.length===0){
+    const card = document.createElement("div"); card.className="card";
+    card.innerHTML = `<div class="card-h"><div class="title">No meetings this day</div></div>
+                      <div class="card-c muted">Add one using the button on the left.</div>`;
+    detailsCol.append(card);
+    return;
+  }
+
+  dayMeetings.forEach(m => {
+    const card = document.createElement("div"); card.className = "card";
+    const head = document.createElement("div"); head.className = "card-h";
+
+    const t = document.createElement("div"); t.className = "title row";
+    const left = document.createElement("span"); left.textContent = m.title;
+    const right = document.createElement("span"); right.className = "muted";
+    right.textContent = `${fmtDate(m.startISO)} • ${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
+    t.append(left, right);
+    head.append(t);
+
+    const desc = document.createElement("div");
+    desc.className = "desc";
+    const where = displayLocation(m);
+    desc.textContent = `${hoursBetween(m.startISO, m.endISO).toFixed(1)} hrs${where ? ` • ${where}` : ''}`;
+    head.append(desc);
+
+    const c = document.createElement("div"); c.className = "card-c";
+    const inner = document.createElement("div");
+    inner.className = "details-grid";
+    inner.style.gridTemplateColumns="1fr 2fr";
+    inner.style.gap="16px";
+
+    const leftCol = document.createElement("div");
+    if(m.description){ const p=document.createElement("p"); p.textContent=m.description; leftCol.append(p); }
+    if(m.talkingPoints){ const k=document.createElement("div"); k.className="kicker"; k.textContent="Suggested talking points";
+      const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
+      box.textContent=m.talkingPoints; leftCol.append(k, box);
+    }
+    if(m.prepChecklist){ const k=document.createElement("div"); k.className="kicker"; k.textContent="Prep checklist";
+      const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
+      box.textContent=m.prepChecklist; leftCol.append(k, box);
+    }
+    const edit = document.createElement("button"); edit.className="btn"; edit.textContent="✏️ Edit details";
+    edit.onclick = ()=> openMeetingDialog(m);
+    leftCol.append(edit);
+
+    const rightCol = document.createElement("div");
+    const ak = document.createElement("div"); ak.className="kicker"; ak.textContent="Attendees";
+    rightCol.append(ak);
+    (m.attendees||[]).forEach(a => {
+      const wrap = document.createElement("div"); wrap.className="attendee";
+      const row = document.createElement("div"); row.className="row";
+      const who = document.createElement("div"); who.className="row"; who.style.gap="12px";
+      const av = document.createElement("div"); av.className = "avatar";
+      if (a.photoUrl) {
+        const img = document.createElement("img"); img.src = a.photoUrl; img.alt = a.name || "Photo"; img.className = "avatar-img";
+        av.append(img);
+      } else {
+        av.textContent = (a.name || "?").slice(0,1).toUpperCase();
       }
+      const meta = document.createElement("div");
+      const nm = document.createElement("div"); nm.className = "name"; nm.textContent = a.name;
+      const sub = document.createElement("div"); sub.className = "role"; sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
+      meta.append(nm, sub);
+      who.append(av, meta);
 
- dayMeetings.forEach(m => {
-  const card = document.createElement("div"); card.className = "card";
+      const link = document.createElement("a"); link.className="link"; link.textContent="LinkedIn"; link.target="_blank"; link.rel="noreferrer";
+      if(a.linkedin) link.href=a.linkedin; else { link.href="#"; link.style.pointerEvents="none"; link.style.opacity=".5"; }
 
-  const head = document.createElement("div"); head.className = "card-h";
+      row.append(who, link);
+      if(a.notes){
+        const notes=document.createElement("div"); notes.style.marginTop="6px"; notes.textContent=a.notes; 
+        wrap.append(row, notes);
+      } else {
+        wrap.append(row);
+      }
+      rightCol.append(wrap);
+    });
 
-  // Title row
-  const t = document.createElement("div"); t.className = "title row";
-  const left = document.createElement("span"); left.textContent = m.title;
-  const right = document.createElement("span"); right.className = "muted";
-  right.textContent = `${fmtDate(m.startISO)} • ${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
-  t.append(left, right);
-  head.append(t);
-
-  // One desc line (duration + location), defined once
-  const desc = document.createElement("div");
-  desc.className = "desc";
-  const where = displayLocation(m);
-  desc.textContent = `${hoursBetween(m.startISO, m.endISO).toFixed(1)} hrs${where ? ` • ${where}` : ''}`;
-  head.append(desc);
-
-  const c = document.createElement("div"); c.className = "card-c";
-  const inner = document.createElement("div");
-  inner.className = "details-grid";
-  inner.style.gridTemplateColumns="1fr 2fr";
-  inner.style.gap="16px";
-
-  // Left column (notes)
-  const leftCol = document.createElement("div");
-  if(m.description){
-    const p = document.createElement("p");
-    p.textContent = m.description;
-    leftCol.append(p);
-  }
-  if(m.talkingPoints){
-    const k = document.createElement("div"); k.className="kicker"; k.textContent = "Suggested talking points";
-    const box = document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
-    box.textContent = m.talkingPoints; leftCol.append(k, box);
-  }
-  if(m.prepChecklist){
-    const k = document.createElement("div"); k.className="kicker"; k.textContent = "Prep checklist";
-    const box = document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
-    box.textContent = m.prepChecklist; leftCol.append(k, box);
-  }
-  const edit = document.createElement("button"); edit.className="btn"; edit.textContent="✏️ Edit details";
-  edit.onclick = ()=> openMeetingDialog(m);
-  leftCol.append(edit);
-
-  // Right column (attendees)
-  const rightCol = document.createElement("div");
-  const ak = document.createElement("div"); ak.className="kicker"; ak.textContent="Attendees";
-  rightCol.append(ak);
-  (m.attendees||[]).forEach(a => {
-    const wrap = document.createElement("div"); wrap.className="attendee";
-    const row = document.createElement("div"); row.className="row";
-    const who = document.createElement("div"); who.className="row"; who.style.gap="12px";
-    const av = document.createElement("div"); av.className = "avatar";
-    if (a.photoUrl) {
-      const img = document.createElement("img"); img.src = a.photoUrl; img.alt = a.name || "Photo"; img.className = "avatar-img";
-      av.append(img);
-    } else {
-      av.textContent = (a.name || "?").slice(0,1).toUpperCase();
-    }
-    const meta = document.createElement("div");
-    const nm = document.createElement("div"); nm.className = "name"; nm.textContent = a.name;
-    const sub = document.createElement("div"); sub.className = "role"; sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
-    meta.append(nm, sub);
-    who.append(av, meta);
-
-    const link = document.createElement("a"); link.className="link"; link.textContent="LinkedIn"; link.target="_blank"; link.rel="noreferrer";
-    if(a.linkedin) link.href=a.linkedin; else { link.href="#"; link.style.pointerEvents="none"; link.style.opacity=".5"; }
-
-    row.append(who, link);
-    if(a.notes){
-      const notes=document.createElement("div"); notes.style.marginTop="6px"; notes.textContent=a.notes; 
-      wrap.append(row, notes);
-    } else {
-      wrap.append(row);
-    }
-    rightCol.append(wrap);
+    // ✅ keep these inside the forEach
+    inner.append(rightCol, leftCol);
+    c.append(inner);
+    card.append(head, c);
+    detailsCol.append(card);
   });
-} 
-  inner.append(rightCol, leftCol);
-  c.append(inner);
-  card.append(head, c);
-  detailsCol.append(card);
-});
+}
 
     function renderTravel(){
       const root = travelSection;
