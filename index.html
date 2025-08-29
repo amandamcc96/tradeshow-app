@@ -390,6 +390,8 @@ header .tools .btn {
 }  
     #rowDateOnly.hidden { display:none; }
 .chip input { margin-right:6px; }
+    .item.meeting.clickable { cursor: pointer; }
+.pulse { outline: 2px solid var(--blue); box-shadow: 0 0 0 4px var(--primary-50); transition: box-shadow .2s ease; }
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -455,7 +457,16 @@ header .tools .btn {
     <div id="gptHint" class="desc">No link set yet. Click <em>Set Link</em> to add one.</div>
   </div>
 </div>
-
+<div id="travelCard" class="card">
+  <div class="card-h">
+    <div class="row">
+      <div class="title">✈️ Travel</div>
+      <button id="travelCollapseBtn" class="btn icon" aria-expanded="true" title="Collapse/expand">▾</button>
+    </div>
+    <div class="desc">Store flight, hotel, and ground confirmations.</div>
+  </div>
+  <div class="card-c" id="travelSection"></div>
+</div>
     <div class="grid">
       <!-- Left -->
       <div class="col gap16">
@@ -485,19 +496,8 @@ header .tools .btn {
           </div>
         </div>
 
-        <!-- Ask our GPT -->
+    
         
-
-        <!-- Travel -->
-        <div class="card">
-          <div class="card-h">
-            <div class="title">✈️ Travel</div>
-            <div class="desc">Store flight, hotel, and ground confirmations.</div>
-          </div>
-          <div class="card-c" id="travelSection"></div>
-        </div>
-      </div>
-
       <!-- Right -->
       <div class="col gap16" id="detailsCol"></div>
     </div>
@@ -721,7 +721,14 @@ function renderNotes(text){
     return p;
   }
 }
-    // seed
+   function focusMeetingInDetails(id){
+  const el = document.getElementById(`detail-${id}`);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.classList.add("pulse");
+  setTimeout(() => el.classList.remove("pulse"), 1200);
+}
+   // seed
     const seedDate = (()=>{
       const now = new Date();
       return new Date(now.getFullYear(), 8, 16, 9, 0, 0);
@@ -801,6 +808,19 @@ const t_endDate     = $("#t_endDate");
   t_rowDateTime.classList.toggle("hidden", isHotel);
   t_rowDateOnly.classList.toggle("hidden", !isHotel);
 }
+const travelCollapseBtn = $("#travelCollapseBtn");
+
+function setTravelCollapsed(collapsed, persist = true){
+  $("#travelSection").classList.toggle("hidden", collapsed);
+  travelCollapseBtn.setAttribute("aria-expanded", String(!collapsed));
+  travelCollapseBtn.textContent = collapsed ? "▸" : "▾";
+  if (persist) localStorage.setItem("travelCollapsed", collapsed ? "1" : "0");
+}
+const initialTravelCollapsed = localStorage.getItem("travelCollapsed") === "1";
+setTravelCollapsed(initialTravelCollapsed, false);
+
+travelCollapseBtn.onclick = () =>
+  setTravelCollapsed(!$("#travelSection").classList.contains("hidden"));
     const brandLogo  = $("#brandLogo");
 const setLogoBtn = $("#setLogoBtn");
 const logoDialog = $("#logoDialog");
@@ -1100,55 +1120,56 @@ function itemsForDay(iso){
 
   return [...m, ...s].sort((a,b)=> new Date(a.startISO) - new Date(b.startISO));
 }
-  function renderAgenda(){
+ function renderAgenda(){
   agendaList.innerHTML = "";
 
-  // Show unscheduled (date TBD) at the top
-const unscheduled = meetings.filter(m => m.dateTBD);
-if (isAnchorDay(activeDate) && unscheduled.length){
-  const hdr = document.createElement("div");
-  hdr.className = "kicker";
-  hdr.textContent = "Unscheduled (TBD date)";
-  agendaList.append(hdr);
+  // Unscheduled (date TBD) section (only on anchor day)
+  const unscheduled = meetings.filter(m => m.dateTBD);
+  if (isAnchorDay(activeDate) && unscheduled.length){
+    const hdr = document.createElement("div");
+    hdr.className = "kicker";
+    hdr.textContent = "Unscheduled (TBD date)";
+    agendaList.append(hdr);
 
-  unscheduled.forEach(m => {
-    const card = document.createElement("div"); card.className = "item meeting";
-    const c = document.createElement("div"); c.className = "item-c";
-    const left = document.createElement("div");
+    unscheduled.forEach(m => {
+      const card = document.createElement("div"); card.className = "item meeting clickable";
+      const c = document.createElement("div"); c.className = "item-c";
+      const left = document.createElement("div");
 
-    const title = document.createElement("div");
-    title.className = "title";
-    title.textContent = `TBD • ${m.title}`;
+      const title = document.createElement("div"); title.className = "title";
+      title.textContent = `TBD • ${m.title}`;
 
-    const sub = document.createElement("div");
-    sub.className = "sub";
-    const loc = displayLocation(m);
-    const booth = m.booth ? `Booth ${m.booth}` : "";
-    sub.textContent = [loc, booth].filter(Boolean).join(" • ");
+      const sub = document.createElement("div"); sub.className = "sub";
+      const loc = displayLocation(m);
+      const booth = m.booth ? `Booth ${m.booth}` : "";
+      sub.textContent = [loc, booth].filter(Boolean).join(" • ");
 
-    left.append(title, sub);
+      left.append(title, sub);
 
-    const tools = document.createElement("div"); tools.className="tools";
-    const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
-    edit.onclick = () => openMeetingDialog(m);
-    const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
-    del.onclick = async () => {
-      if (!confirm("Delete this meeting?")) return;
-      try { await deleteMeeting(m.id); } catch(e){ console.error(e); alert("Delete failed."); }
-    };
-    tools.append(edit, del);
+      const tools = document.createElement("div"); tools.className="tools";
+      const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
+      edit.onclick = (e) => { e.stopPropagation(); openMeetingDialog(m); };
+      const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
+      del.onclick  = async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this meeting?")) return;
+        try { await deleteMeeting(m.id); } catch(e){ console.error(e); alert("Delete failed."); }
+      };
+      tools.append(edit, del);
 
-    c.append(left, tools);
-    card.append(c);
-    agendaList.append(card);
-  });
+      c.append(left, tools);
+      card.append(c);
+      card.addEventListener("click", () => focusMeetingInDetails(m.id));
+      agendaList.append(card);
+    });
 
-  const hr = document.createElement("div"); hr.className = "spacer";
-  agendaList.append(hr);
-}
+    const spacer = document.createElement("div"); spacer.className = "spacer";
+    agendaList.append(spacer);
+  }
 
+  // Scheduled items for the active day
   const items = itemsForDay(activeDate);
-  if(items.length === 0){
+  if (items.length === 0){
     const div = document.createElement("div");
     div.className = "muted";
     div.textContent = "No scheduled items for this date.";
@@ -1161,57 +1182,54 @@ if (isAnchorDay(activeDate) && unscheduled.length){
     card.className = "item";
     if (it.kind === 'session') card.classList.add('session');
     else if (it.kind === 'meeting') card.classList.add('meeting');
-    if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) {
+
+    if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')){
       card.classList.add('afterhours');
     }
 
-    const c = document.createElement("div");
-    c.className = "item-c";
+    const c = document.createElement("div"); c.className = "item-c";
 
     const left = document.createElement("div");
-    const title = document.createElement("div");
-    title.className = "title";
-    const tLabel = (it.dateTBD || it.timeTBD)
-      ? "TBD"
-      : `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
+    const title = document.createElement("div"); title.className = "title";
+    const tLabel = (it.dateTBD || it.timeTBD) ? "TBD" : `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
     title.textContent = `${tLabel} • ${it.title}`;
 
-    const sub = document.createElement("div");
-    sub.className = "sub";
+    const sub = document.createElement("div"); sub.className = "sub";
     const loc = displayLocation(it);
     const booth = it.booth ? `Booth ${it.booth}` : "";
     sub.textContent = [loc, booth].filter(Boolean).join(" • ");
-
     left.append(title, sub);
 
-    const tools = document.createElement("div");
-    tools.className = "tools";
-
+    const tools = document.createElement("div"); tools.className = "tools";
     if (it.kind === 'meeting') {
-      const edit = document.createElement("button");
-      edit.className = "btn sm"; edit.textContent = "✏️";
-      edit.onclick = () => openMeetingDialog(it);
+      const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
+      edit.onclick = (e) => { e.stopPropagation(); openMeetingDialog(it); };
 
-      const del = document.createElement("button");
-      del.className = "btn sm"; del.textContent = "🗑️";
-      del.onclick = async () => {
+      const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
+      del.onclick = async (e) => {
+        e.stopPropagation();
         if (!confirm("Delete this meeting?")) return;
         try { await deleteMeeting(it.id); } catch(e){ console.error(e); alert("Delete failed."); }
       };
 
       tools.append(edit, del);
     } else {
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.textContent = "SESSION";
+      const chip = document.createElement("span"); chip.className = "chip"; chip.textContent = "SESSION";
       tools.append(chip);
     }
 
     c.append(left, tools);
     card.append(c);
+
+    if (it.kind === 'meeting') {
+      card.classList.add('clickable');
+      card.addEventListener('click', () => focusMeetingInDetails(it.id));
+    }
+
     agendaList.append(card);
   });
 }
+
 function renderHourly(){
   hourlyGrid.innerHTML = "";
   const items = itemsForDay(activeDate);
@@ -1230,21 +1248,22 @@ function renderHourly(){
 
     const box = document.createElement("div");
     box.style.display = "flex"; box.style.flexWrap = "wrap"; box.style.gap = "8px";
+tbdToday.forEach(it => {
+  const pill = document.createElement("span");
+  pill.className = "meeting-pill meeting";
+  pill.style.cursor = "pointer";
+  pill.addEventListener("click", () => focusMeetingInDetails(it.id));
 
-    tbdToday.forEach(it => {
-      const pill = document.createElement("span");
-      pill.className = "meeting-pill meeting";
-      const loc  = displayLocation(it);
-      const meta = loc ? `TBD • ${escapeHtml(loc)}` : "TBD";
-      pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
-      box.append(pill);
-    });
-
+  const loc  = displayLocation(it);
+  const meta = loc ? `TBD • ${escapeHtml(loc)}` : "TBD";
+  pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
+  box.append(pill);
+});
     cell.append(box);
     row.append(lbl, cell);
     wrap.append(row);
   }
-
+    
   // --- Hourly grid (PT) ---
   const startHour = 7;        // 7 AM PT
   const hoursToShow = 17;     // 7am–11pm
@@ -1286,7 +1305,10 @@ function renderHourly(){
         if (it.kind === "session" && (it.afterHours || it.category === "afterHours")){
           pill.classList.add("afterhours");
         }
-
+if (it.kind === "meeting") {
+  pill.style.cursor = "pointer";
+  pill.addEventListener("click", () => focusMeetingInDetails(it.id));
+}
         const loc = displayLocation(it);
         const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
         const meta = loc ? `${timeRange} • ${escapeHtml(loc)}` : timeRange;
@@ -1330,6 +1352,7 @@ const dayMeetings = meetings
   dayMeetings.forEach(m => {
     const card = document.createElement("div"); 
     card.className = "card";
+card.id = `detail-${m.id}`;
 
     const head = document.createElement("div"); 
     head.className = "card-h";
