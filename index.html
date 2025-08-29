@@ -388,10 +388,35 @@ header .tools .btn {
   white-space: normal;
   max-width: 100%;
 }  
+  
     #rowDateOnly.hidden { display:none; }
 .chip input { margin-right:6px; }
     .item.meeting.clickable { cursor: pointer; }
 .pulse { outline: 2px solid var(--blue); box-shadow: 0 0 0 4px var(--primary-50); transition: box-shadow .2s ease; }
+    #travelCard .desc { display: none; }
+    .legend { display:flex; gap:10px; align-items:center; }
+.legend-item { display:inline-flex; align-items:center; gap:6px;
+  font-size:12px; padding:4px 8px; border:1px solid var(--border);
+  border-radius:999px; background:#fff;
+}
+.legend-swatch { width:10px; height:10px; border-radius:3px; border:1px solid var(--border); }
+/* Optional swatch helpers (uses your existing CSS variables) */
+.legend-afterhours { background: var(--afterhours-accent); }
+.legend-session    { background: var(--session-accent); }
+.legend-meeting    { background: var(--meeting-accent); }
+   #travelCard .card-h { 
+  padding: 10px 12px;              /* same as #gptCard .card-h */
+}
+#travelCard .title {
+  font-size: 26px;                 /* same as #gptCard .title */
+  line-height: 1.15;
+}
+/* Ensure the collapse icon matches the day nav buttons */
+#travelCard .btn.icon {
+  width: 36px;
+  height: 36px;
+} 
+    #travelCard .btn.icon { width:36px; height:36px; line-height:1; font-size:18px; }
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -813,7 +838,8 @@ const travelCollapseBtn = $("#travelCollapseBtn");
 function setTravelCollapsed(collapsed, persist = true){
   $("#travelSection").classList.toggle("hidden", collapsed);
   travelCollapseBtn.setAttribute("aria-expanded", String(!collapsed));
-  travelCollapseBtn.textContent = collapsed ? "▸" : "▾";
+    travelCollapseBtn.textContent = collapsed ? "▼" : "▲";
+  travelCollapseBtn.title = collapsed ? "Expand" : "Collapse";
   if (persist) localStorage.setItem("travelCollapsed", collapsed ? "1" : "0");
 }
 const initialTravelCollapsed = localStorage.getItem("travelCollapsed") === "1";
@@ -1258,6 +1284,8 @@ const loc   = displayLocation(it);
 const booth = it.booth ? `Booth ${escapeHtml(it.booth)}` : "";
 const where = [loc, booth].filter(Boolean).join(" • ");
 const meta  = where ? `TBD • ${where}` : "TBD";
+   pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
+
   box.append(pill);
 });
     cell.append(box);
@@ -1738,32 +1766,26 @@ function renderLogo(){
 }
 
 async function renderImportExport(){
-  const root = document.createElement("div");
-  const inp = document.createElement("input");
-inp.type = "file";
-inp.accept = "application/json";
-inp.className = "hidden";
+   const root = document.createElement("div");
+  root.className = "legend";
+    root.innerHTML = `
+    <span class="legend-item">
+      <span class="legend-swatch legend-meeting"></span>
+      Meetings
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch legend-session"></span>
+      Sessions
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch legend-afterhours"></span>
+      After-hours events
+    </span>`;
 
-  const btnImport = document.createElement("button"); 
-  btnImport.className = "btn sm"; 
-  btnImport.textContent = "⬆️ Import";
-
-  const btnExport = document.createElement("button"); 
-  btnExport.className = "btn sm"; 
-  btnExport.textContent = "⬇️ Export";
-
-  btnImport.onclick = () => inp.click();
-
-  // IMPORT
-  inp.onchange = async (e) => {
-  const f = e.target.files?.[0];
-  if (!f) return;
-
-  try {
-    const parsed = JSON.parse(await f.text());
-    const meetingsIn = Array.isArray(parsed.meetings) ? parsed.meetings : [];
-    const travelIn   = Array.isArray(parsed.travel)   ? parsed.travel   : [];
-    const sessionsIn = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+  const slot = document.getElementById("importExport");
+  slot.innerHTML = "";
+  slot.append(root);
+}
 
     // --- helper to merge by 'id' and skip stale docs (older updatedAtMs) ---
     async function mergeCollection(colRef, incoming) {
