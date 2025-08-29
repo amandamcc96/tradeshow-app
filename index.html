@@ -1085,13 +1085,14 @@ function itemsForDay(iso){
 }
   function renderAgenda(){
   agendaList.innerHTML = "";
-  if (isAnchorDay(activeDate)) {
-    const unscheduled = meetings.filter(m => m.dateTBD);
-    if (unscheduled.length) {
-      const hdr = document.createElement("div");
-      hdr.className = "kicker";
-      hdr.textContent = "Unscheduled (TBD date)";
-      agendaList.append(hdr);
+
+  // Show unscheduled (date TBD) at the top
+  const unscheduled = meetings.filter(m => m.dateTBD);
+  if (unscheduled.length){
+    const hdr = document.createElement("div");
+    hdr.className = "kicker";
+    hdr.textContent = "Unscheduled (TBD date)";
+    agendaList.append(hdr);
 
     unscheduled.forEach(m => {
       const card = document.createElement("div"); card.className = "item meeting";
@@ -1127,8 +1128,6 @@ function itemsForDay(iso){
 
     const hr = document.createElement("div"); hr.className = "spacer";
     agendaList.append(hr);
-       });
-    }
   }
 
   const items = itemsForDay(activeDate);
