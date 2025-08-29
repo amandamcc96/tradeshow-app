@@ -528,10 +528,12 @@ header .tools .btn {
         <input id="m_location" placeholder="Location" />
         <input id="m_booth" placeholder="Booth" />
       </div>
+      
     <div class="two" id="rowDateTimes">
   <input id="m_start" type="datetime-local" />
   <input id="m_end"   type="datetime-local" />
 </div>
+  
       <div class="two">
   <label class="chip"><input id="m_dateTBD" type="checkbox"> Date TBD</label>
   <label class="chip"><input id="m_timeTBD" type="checkbox"> Time TBD</label>
@@ -587,10 +589,16 @@ header .tools .btn {
           <input id="t_conf" placeholder="Confirmation #" />
           <input id="t_details" placeholder="Details" />
         </div>
-        <div class="two">
+        <div class="two" id="t_rowDateTime">
           <input id="t_start" type="datetime-local" />
           <input id="t_end" type="datetime-local" />
-        </div>
+          </div>
+
+<!-- Show only for hotels -->
+<div class="two hidden" id="t_rowDateOnly">
+  <input id="t_startDate" type="date" />
+  <input id="t_endDate"   type="date" />
+</div>
       </div>
     </div>
     <div class="dialog-actions">
@@ -784,6 +792,15 @@ let logoUrl = "";
     const setGptBtn = $("#setGptBtn");
     const gptHint = $("#gptHint");
     const travelSection = $("#travelSection");
+    const t_rowDateTime = $("#t_rowDateTime");
+const t_rowDateOnly = $("#t_rowDateOnly");
+const t_startDate   = $("#t_startDate");
+const t_endDate     = $("#t_endDate");
+    function updateTravelDateInputs(){
+  const isHotel = (t_type.value === "hotel");
+  t_rowDateTime.classList.toggle("hidden", isHotel);
+  t_rowDateOnly.classList.toggle("hidden", !isHotel);
+}
     const brandLogo  = $("#brandLogo");
 const setLogoBtn = $("#setLogoBtn");
 const logoDialog = $("#logoDialog");
@@ -1087,48 +1104,48 @@ function itemsForDay(iso){
   agendaList.innerHTML = "";
 
   // Show unscheduled (date TBD) at the top
-  const unscheduled = meetings.filter(m => m.dateTBD);
-  if (unscheduled.length){
-    const hdr = document.createElement("div");
-    hdr.className = "kicker";
-    hdr.textContent = "Unscheduled (TBD date)";
-    agendaList.append(hdr);
+const unscheduled = meetings.filter(m => m.dateTBD);
+if (isAnchorDay(activeDate) && unscheduled.length){
+  const hdr = document.createElement("div");
+  hdr.className = "kicker";
+  hdr.textContent = "Unscheduled (TBD date)";
+  agendaList.append(hdr);
 
-    unscheduled.forEach(m => {
-      const card = document.createElement("div"); card.className = "item meeting";
-      const c = document.createElement("div"); c.className = "item-c";
-      const left = document.createElement("div");
+  unscheduled.forEach(m => {
+    const card = document.createElement("div"); card.className = "item meeting";
+    const c = document.createElement("div"); c.className = "item-c";
+    const left = document.createElement("div");
 
-      const title = document.createElement("div");
-      title.className = "title";
-      title.textContent = `TBD • ${m.title}`;
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = `TBD • ${m.title}`;
 
-      const sub = document.createElement("div");
-      sub.className = "sub";
-      const loc = displayLocation(m);
-      const booth = m.booth ? `Booth ${m.booth}` : "";
-      sub.textContent = [loc, booth].filter(Boolean).join(" • ");
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    const loc = displayLocation(m);
+    const booth = m.booth ? `Booth ${m.booth}` : "";
+    sub.textContent = [loc, booth].filter(Boolean).join(" • ");
 
-      left.append(title, sub);
+    left.append(title, sub);
 
-      const tools = document.createElement("div"); tools.className="tools";
-      const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
-      edit.onclick = () => openMeetingDialog(m);
-      const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
-      del.onclick = async () => {
-        if (!confirm("Delete this meeting?")) return;
-        try { await deleteMeeting(m.id); } catch(e){ console.error(e); alert("Delete failed."); }
-      };
-      tools.append(edit, del);
+    const tools = document.createElement("div"); tools.className="tools";
+    const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
+    edit.onclick = () => openMeetingDialog(m);
+    const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
+    del.onclick = async () => {
+      if (!confirm("Delete this meeting?")) return;
+      try { await deleteMeeting(m.id); } catch(e){ console.error(e); alert("Delete failed."); }
+    };
+    tools.append(edit, del);
 
-      c.append(left, tools);
-      card.append(c);
-      agendaList.append(card);
-    });
+    c.append(left, tools);
+    card.append(c);
+    agendaList.append(card);
+  });
 
-    const hr = document.createElement("div"); hr.className = "spacer";
-    agendaList.append(hr);
-  }
+  const hr = document.createElement("div"); hr.className = "spacer";
+  agendaList.append(hr);
+}
 
   const items = itemsForDay(activeDate);
   if(items.length === 0){
@@ -1434,59 +1451,117 @@ function updateTbdUI(){
 }
 m_dateTBD.onchange = updateTbdUI;
 m_timeTBD.onchange = updateTbdUI;
-    function renderTravel(){
-      const root = travelSection;
-      root.innerHTML = "";
-      const add = document.createElement("button"); add.className="btn"; add.textContent="➕ Add travel";
-      add.onclick = ()=>{
-        t_type.value="flight"; t_label.value=""; t_conf.value=""; t_details.value="";
-        t_start.value=""; t_end.value="";
-        travelDialog.dataset.editId = ""; travelDialog.showModal();
-      };
-      root.append(add);
-      const spacer = document.createElement("div");
-spacer.className = "spacer";
-root.append(spacer);
+function renderTravel(){
+  const root = travelSection;
+  root.innerHTML = "";
 
-      if(travel.length===0){
-        const div = document.createElement("div"); div.className="muted"; div.textContent="No travel saved.";
-        root.append(div); return;
-      }
+  const add = document.createElement("button");
+  add.className = "btn";
+  add.textContent = "➕ Add travel";
+  add.onclick = () => {
+    t_type.value   = "flight";
+    t_label.value  = "";
+    t_conf.value   = "";
+    t_details.value= "";
+    t_start.value  = "";
+    t_end.value    = "";
+    t_startDate.value = "";
+    t_endDate.value   = "";
 
-      travel.forEach(t => {
-        const row = document.createElement("div");
-        row.className="item"; const inner=document.createElement("div"); inner.className="item-c";
-        const left = document.createElement("div");
-        const head = document.createElement("div"); head.className="title"; head.textContent = `[${t.type.toUpperCase()}] ${t.label}`;
-        const sub = document.createElement("div"); sub.className="muted"; sub.style.fontSize="12px";
-        const bits=[];
-        if(t.confirmation) bits.push(`Conf#: ${t.confirmation}`);
-        if(t.startISO) bits.push(`Start ${fmtDate(t.startISO)} ${fmtTime(t.startISO)}`);
-        if(t.endISO) bits.push(`End ${fmtDate(t.endISO)} ${fmtTime(t.endISO)}`);
-        sub.textContent = bits.join(" • ");
-        if(t.details){ const d=document.createElement("div"); d.style.fontSize="12px"; d.textContent=t.details; left.append(head, sub, d); }
-        else left.append(head, sub);
-        const tools = document.createElement("div"); tools.className="tools";
-        const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
-        edit.onclick = ()=>{
-          t_type.value=t.type; t_label.value=t.label; t_conf.value=t.confirmation||""; t_details.value=t.details||"";
-          t_start.value = t.startISO? new Date(t.startISO).toISOString().slice(0,16): "";
-          t_end.value = t.endISO? new Date(t.endISO).toISOString().slice(0,16): "";
-          travelDialog.dataset.editId = t.id; travelDialog.showModal();
-        };
-        const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
-   del.onclick = async () => {
-  if (!confirm("Delete this travel item?")) return;
-  try { await deleteTravel(t.id); }
-  catch(e){ console.error(e); alert("Delete failed."); }
-};
-        tools.append(edit, del);
-        inner.append(left, tools);
-        row.append(inner);
-        root.append(row);
-      });
+    updateTravelDateInputs();      // show datetime by default for flight
+    travelDialog.dataset.editId = "";
+    travelDialog.showModal();
+  };
+  root.append(add);
+
+  const spacer = document.createElement("div");
+  spacer.className = "spacer";
+  root.append(spacer);
+
+  if (travel.length === 0){
+    const div = document.createElement("div");
+    div.className = "muted";
+    div.textContent = "No travel saved.";
+    root.append(div);
+    return;
+  }
+
+  travel.forEach(t => {
+    const row   = document.createElement("div"); row.className = "item";
+    const inner = document.createElement("div"); inner.className = "item-c";
+
+    const left  = document.createElement("div");
+    const head  = document.createElement("div"); head.className = "title";
+    head.textContent = `[${t.type.toUpperCase()}] ${t.label}`;
+
+    const sub   = document.createElement("div");
+    sub.className = "muted";
+    sub.style.fontSize = "12px";
+
+    const bits = [];
+    if (t.confirmation) bits.push(`Conf#: ${t.confirmation}`);
+    if (t.type === "hotel"){
+      if (t.startISO) bits.push(`Check-in ${fmtDate(t.startISO)}`);
+      if (t.endISO)   bits.push(`Check-out ${fmtDate(t.endISO)}`);
+    } else {
+      if (t.startISO) bits.push(`Start ${fmtDate(t.startISO)} ${fmtTime(t.startISO)}`);
+      if (t.endISO)   bits.push(`End ${fmtDate(t.endISO)} ${fmtTime(t.endISO)}`);
+    }
+    sub.textContent = bits.join(" • ");
+
+    if (t.details){
+      const d = document.createElement("div");
+      d.style.fontSize = "12px";
+      d.textContent = t.details;
+      left.append(head, sub, d);
+    } else {
+      left.append(head, sub);
     }
 
+    const tools = document.createElement("div"); tools.className = "tools";
+    const edit  = document.createElement("button"); edit.className = "btn sm"; edit.textContent = "✏️";
+    edit.onclick = () => {
+      t_type.value   = t.type;
+      t_label.value  = t.label;
+      t_conf.value   = t.confirmation || "";
+      t_details.value= t.details || "";
+function toYMD(iso){
+  if (!iso) return "";
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+      // populate date/datetime inputs based on type
+      if (t.type === "hotel"){
+        t_startDate.value = toYMD(t.startISO);
+        t_endDate.value   = toYMD(t.endISO);
+        t_start.value = ""; t_end.value = "";
+      } else {
+        t_start.value = t.startISO ? new Date(t.startISO).toISOString().slice(0,16) : "";
+        t_end.value   = t.endISO   ? new Date(t.endISO).toISOString().slice(0,16)   : "";
+        t_startDate.value = ""; t_endDate.value = "";
+      }
+
+      updateTravelDateInputs();
+      travelDialog.dataset.editId = t.id;
+      travelDialog.showModal();
+    };
+
+    const del = document.createElement("button"); del.className = "btn sm"; del.textContent = "🗑️";
+    del.onclick = async () => {
+      if (!confirm("Delete this travel item?")) return;
+      try { await deleteTravel(t.id); }
+      catch(e){ console.error(e); alert("Delete failed."); }
+    };
+
+    tools.append(edit, del);
+    inner.append(left, tools);
+    row.append(inner);
+    root.append(row);
+  });
+}
   function openMeetingDialog(m){
   meetingDialog.dataset.editId = m?.id || "";
   dlgTitle.textContent = m ? "Edit meeting" : "New meeting";
@@ -1749,6 +1824,7 @@ inp.className = "hidden";
     gptSave.onclick = async ()=>{ gptUrl = (gptInput.value||"").trim(); await setSharedDoc('gptUrl', gptUrl); gptDialog.close(); };
 
     t_cancel.onclick = ()=> travelDialog.close();
+    t_type.addEventListener("change", updateTravelDateInputs);
 t_save.onclick = async () => {
   const id = travelDialog.dataset.editId;
   const payload = {
@@ -1758,20 +1834,30 @@ t_save.onclick = async () => {
     confirmation: t_conf.value.trim(),
     details: t_details.value.trim(),
   };
-  if (t_start.value) payload.startISO = new Date(t_start.value).toISOString();
-  if (t_end.value)   payload.endISO   = new Date(t_end.value).toISOString();
+
   if (!payload.label){ alert("Label required"); return; }
 
-  if (payload.startISO && payload.endISO && new Date(payload.endISO) < new Date(payload.startISO)){
-    alert("Travel end must be after start."); return;
+  if (t_type.value === "hotel") {
+    // date-only: store midnight UTC for both (or whichever provided)
+    if (t_startDate.value) payload.startISO = new Date(`${t_startDate.value}T12:00:00`).toISOString();
+    if (t_endDate.value)   payload.endISO   = new Date(`${t_endDate.value}T12:00:00`).toISOString();
+  } else {
+    // datetime for flights/ground
+    if (t_start.value) payload.startISO = new Date(t_start.value).toISOString();
+    if (t_end.value)   payload.endISO   = new Date(t_end.value).toISOString();
+    if (payload.startISO && payload.endISO && new Date(payload.endISO) < new Date(payload.startISO)){
+      alert("Travel end must be after start."); return;
+    }
   }
-const now = Date.now();
-if (!id) payload.createdAtMs = now;
-payload.updatedAtMs = now;
+
+  const now = Date.now();
+  if (!id) payload.createdAtMs = now;
+  payload.updatedAtMs = now;
+
   try {
     await upsertTravel(payload);
     travelDialog.close();
-  } catch(e){
+  } catch (e){
     console.error(e);
     alert('Save failed.');
   }
