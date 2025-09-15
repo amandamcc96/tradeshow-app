@@ -733,36 +733,7 @@ function renderNotes(text){
       const now = new Date();
       return new Date(now.getFullYear(), 8, 16, 9, 0, 0);
     })();
-    const SAMPLE_ATTENDEES = [
-      {id:uid(), name:"Chris Williams", title:"VP Partnerships", company:"NorthBridge", linkedin:"", photoUrl:"", notes:"Loves concise dashboards; ask about Zoho practice."},
-      {id:uid(), name:"Amanda Lee", title:"Head of Marketing", company:"Protocol80", linkedin:"", photoUrl:"", notes:"Interested in co-marketing webinars and case studies."},
-      {id:uid(), name:"Hudson Carter", title:"Solutions Architect", company:"CloudTrailz", linkedin:"", photoUrl:"", notes:"Deep NetSuite background; prefers technical prep notes."},
-    ];
-    const SAMPLE_MEETINGS = [
-      { id:uid(), title:"NorthBridge + Commercient intro", description:"Explore reseller fit; prioritize Zoho + Monday integrations.",
-        location:"Hall B – Meeting Room 3", booth:"B122",
-        startISO:new Date(seedDate.getTime()).toISOString(),
-        endISO:new Date(seedDate.getTime()+60*60*1000).toISOString(),
-        attendees:[SAMPLE_ATTENDEES[0]], talkingPoints:"15% target share…", prepChecklist:"Review Zoho…"},
-      { id:uid(), title:"Protocol80 co-marketing sprint", description:"Finalize webinar topics and case study pipeline.",
-        location:"Expo Café (near Hall A)", booth:"A210",
-        startISO:new Date(seedDate.getTime()+2*60*60*1000).toISOString(),
-        endISO:new Date(seedDate.getTime()+3*60*60*1000).toISOString(),
-        attendees:[SAMPLE_ATTENDEES[1]], talkingPoints:"Partner Spotlight…", prepChecklist:"Bring sample…"},
-      { id:uid(), title:"CloudTrailz technical sync", description:"Deep-dive NetSuite<->HubSpot patterns; managed custom objects beta lessons.",
-        location:"Booth C341", booth:"C341",
-        startISO:new Date(seedDate.getTime()+4*60*60*1000).toISOString(),
-        endISO:new Date(seedDate.getTime()+5*60*60*1000).toISOString(),
-        attendees:[SAMPLE_ATTENDEES[2]], talkingPoints:"QuickBooks Desktop…", prepChecklist:"Open architecture…"},
-    ];
-    const SAMPLE_TRAVEL = [
-      {id:uid(), type:"flight", label:"ATL → BOS (AC 1234)", confirmation:"Z7X9QW",
-        startISO:new Date(seedDate.getTime()-24*60*60*1000).toISOString(),
-        endISO:new Date(seedDate.getTime()-22*60*60*1000).toISOString(), details:"Seat 14C; carry-on only."},
-      {id:uid(), type:"hotel", label:"Westin Seaport, Boston", confirmation:"H987654",
-        startISO:new Date(seedDate.getTime()-1*60*60*1000).toISOString(),
-        endISO:new Date(seedDate.getTime()+2*24*60*60*1000).toISOString(), details:"Reservation under Commercient; breakfast included."},
-    ];
+
 const MEETINGS = COL.doc('meetings').collection('items');
 const TRAVEL   = COL.doc('travel').collection('items');
 
@@ -778,9 +749,7 @@ function upsertTravel(t){
 }
 function deleteTravel(id){ return TRAVEL.doc(id).delete(); }
     // state (will be replaced by Firestore values on load)
-    let meetings = structuredClone(SAMPLE_MEETINGS);
-    let travel   = structuredClone(SAMPLE_TRAVEL);
-    let gptUrl   = "";
+ let gptUrl   = "";
 let logoUrl = "";
     let activeDate = (meetings[0]?.startISO) || new Date().toISOString();
     let view = "agenda";
