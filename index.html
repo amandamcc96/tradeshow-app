@@ -1254,10 +1254,9 @@ tbdToday.forEach(it => {
   pill.style.cursor = "pointer";
   pill.addEventListener("click", () => focusMeetingInDetails(it.id));
 
-const loc   = displayLocation(it);
-const booth = it.booth ? `Booth ${escapeHtml(it.booth)}` : "";
-const where = [loc, booth].filter(Boolean).join(" • ");
-const meta  = where ? `TBD • ${where}` : "TBD";
+  const loc  = displayLocation(it);
+  const meta = loc ? `TBD • ${escapeHtml(loc)}` : "TBD";
+  pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
   box.append(pill);
 });
     cell.append(box);
@@ -1310,14 +1309,10 @@ if (it.kind === "meeting") {
   pill.style.cursor = "pointer";
   pill.addEventListener("click", () => focusMeetingInDetails(it.id));
 }
-   const loc   = displayLocation(it);
-const booth = it.booth ? `Booth ${escapeHtml(it.booth)}` : "";
-const where = [loc, booth].filter(Boolean).join(" • ");
-
-const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
-const meta = where ? `${timeRange} • ${where}` : timeRange;
-
-pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
+        const loc = displayLocation(it);
+        const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
+        const meta = loc ? `${timeRange} • ${escapeHtml(loc)}` : timeRange;
+        pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
         box.append(pill);
       });
 
