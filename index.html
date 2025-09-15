@@ -1675,7 +1675,6 @@ async function saveMeetingFromDialog(){
   }
 }
 function renderLogo(){
-  // If there's no saved URL: hide image, show the button, and bail.
   if (!logoUrl) {
     brandLogo.removeAttribute('src');
     brandLogo.classList.add('hidden');
@@ -1683,20 +1682,20 @@ function renderLogo(){
     return;
   }
 
-  // Verify the URL loads before we hide the button.
   const probe = new Image();
   probe.onload = () => {
     brandLogo.src = logoUrl;
     brandLogo.classList.remove('hidden');
-    setLogoBtn.classList.add('hidden');  // hide only after a successful load
+    setLogoBtn.classList.add('hidden');
   };
-  probe.onerror = async () => {
-    // Bad URL: clear it so the button comes back.
+  probe.onerror = () => {
+    console.error('[logo] preview failed to load');
+    // ❌ don’t clear Firestore here; just show the button again
     brandLogo.removeAttribute('src');
     brandLogo.classList.add('hidden');
     setLogoBtn.classList.remove('hidden');
-    logoUrl = '';
-    await setSharedDoc('logoUrl', '');
+    // If this keeps happening, the saved value might be invalid; then manually clear:
+    // setSharedDoc('logoUrl', '');
   };
   probe.src = logoUrl;
 }
@@ -1858,24 +1857,40 @@ setLogoBtn.addEventListener('click', () => {
   logoFile.click();
 });
 
-// When a file is chosen, read/resize to data URL and save to Firestore
 logoFile.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
 
+  let dataUrl = '';
   try {
-    const dataUrl = await fileToDataUrl(file, {
-      maxW: 360,     // cap width so the data URL stays small
-      maxH: 120,     // header-height friendly
-      quality: 0.9   // jpeg quality if we encode to jpeg
-    });
+    dataUrl = await fileToDataUrl(file, { maxW: 360, maxH: 120, quality: 0.9 });
 
-    await setSharedDoc('logoUrl', dataUrl); // triggers onSnapshot -> renderLogo()
+    // ✅ Immediate local preview so it "works" even if cloud save fails
+    logoUrl = dataUrl;
+    renderLogo();  // shows it right away
+
   } catch (err) {
-    console.error(err);
-    alert('Could not read that image. Try a PNG or JPG.');
+    console.error('[logo] decode failed', err);
+    alert('Could not read that image (decode). Try a PNG or JPG.');
+    logoFile.value = '';
+    return;
+  }
+
+  // Optional: guard against huge base64 strings (doc size safety)
+  if (dataUrl.length > 750_000) {
+    alert('Logo is too large after resize. Try a smaller image.');
+    logoFile.value = '';
+    return;
+  }
+
+  try {
+    await setSharedDoc('logoUrl', dataUrl);  // cloud save
+  } catch (err) {
+    console.error('[logo] cloud save failed', err);
+    // Show the real reason, e.g. "permission-denied"
+    alert('Could not save logo to the cloud: ' + (err.code || err.message || 'unknown error') +
+          '\nTip: check Firestore rules for /tradeshow/{docId}.');
   } finally {
-    // Reset the input so picking the same file again still fires 'change'
     logoFile.value = '';
   }
 });
