@@ -419,9 +419,7 @@ header .tools .btn {
     return COL.doc(docId).set({ value }, { merge: true });
   }
   function onSharedDoc(docId, cb) {
-    return COL.doc(docId).onSnapshot(s => { if (s.exists) cb(s.data().value); });
-  
-  
+    return COL.doc(docId).onSnapshot(s => { if (s.exists) cb(s.data().value); });  
 }
 
 </script>
@@ -433,8 +431,8 @@ header .tools .btn {
     <h1>
       <!-- Logo replaces the emoji -->
       <img id="brandLogo" class="brand-logo hidden" alt="Company logo" />
-        <button id="setLogoBtn" class="btn sm" type="button">🖼️ Set logo</button>
-      <input id="logoFile" type="file" accept="image/*" class="hidden" />
+      <label for="logoFile" id="setLogoBtn" class="btn sm">🖼️ Set logo</label>
+<input id="logoFile" type="file" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;" />
   Your Elevate 2025 Assistant
   <span class="muted" style="font-weight:400"></span>
 </h1>
@@ -613,7 +611,8 @@ header .tools .btn {
     const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
     const uid = () => Math.random().toString(36).slice(2,9);
-    const TZ = 'America/Los_Angeles';  
+   const TZ = 'America/New_York';
+
    const fmtTime = (iso) =>
   new Date(iso).toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit", timeZone: TZ,
@@ -751,7 +750,9 @@ function deleteTravel(id){ return TRAVEL.doc(id).delete(); }
     // state (will be replaced by Firestore values on load)
  let gptUrl   = "";
 let logoUrl = "";
-    let activeDate = (meetings[0]?.startISO) || new Date().toISOString();
+    let meetings = [];
+let travel   = [];
+    let activeDate = new Date().toISOString();
     let view = "agenda";
 
     // elements
@@ -1122,7 +1123,7 @@ function itemsForDay(iso){
       del.onclick  = async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this meeting?")) return;
-        try { await deleteMeeting(m.id); } catch(e){ console.error(e); alert("Delete failed."); }
+        try { await deleteMeeting(m.id); } catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
       };
       tools.append(edit, del);
 
@@ -1178,7 +1179,7 @@ function itemsForDay(iso){
       del.onclick = async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this meeting?")) return;
-        try { await deleteMeeting(it.id); } catch(e){ console.error(e); alert("Delete failed."); }
+        try { await deleteMeeting(it.id); } catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
       };
 
       tools.append(edit, del);
@@ -1233,8 +1234,8 @@ tbdToday.forEach(it => {
     wrap.append(row);
   }
     
-  // --- Hourly grid (PT) ---
-  const startHour = 7;        // 7 AM PT
+  // --- Hourly grid (ET) ---
+  const startHour = 7;        // 7 AM ET
   const hoursToShow = 17;     // 7am–11pm
 
   const labelFromHour = (hr) => {
@@ -1545,7 +1546,7 @@ function toYMD(iso){
     del.onclick = async () => {
       if (!confirm("Delete this travel item?")) return;
       try { await deleteTravel(t.id); }
-      catch(e){ console.error(e); alert("Delete failed."); }
+     catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
     };
 
     tools.append(edit, del);
@@ -1699,7 +1700,19 @@ function renderLogo(){
   };
   probe.src = logoUrl;
 }
+async function clearAllMeetings() {
+  const snap = await MEETINGS.get();
+  const batch = db.batch();
+  snap.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
+}
 
+async function clearAllTravel() {
+  const snap = await TRAVEL.get();
+  const batch = db.batch();
+  snap.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
+}
 async function renderImportExport(){
   const root = document.createElement("div");
   const inp = document.createElement("input");
@@ -1714,6 +1727,23 @@ inp.className = "hidden";
   const btnExport = document.createElement("button"); 
   btnExport.className = "btn sm"; 
   btnExport.textContent = "⬇️ Export";
+    const btnWipeMeetings = document.createElement("button");
+  btnWipeMeetings.className = "btn sm";
+  btnWipeMeetings.textContent = "🧹 Clear meetings";
+  btnWipeMeetings.onclick = async () => {
+    if (!confirm("Delete ALL meetings?")) return;
+    try { await clearAllMeetings(); alert("Meetings cleared."); }
+    catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
+  };
+
+  const btnWipeTravel = document.createElement("button");
+  btnWipeTravel.className = "btn sm";
+  btnWipeTravel.textContent = "🧹 Clear travel";
+  btnWipeTravel.onclick = async () => {
+    if (!confirm("Delete ALL travel?")) return;
+    try { await clearAllTravel(); alert("Travel cleared."); }
+    catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
+  };
 
   btnImport.onclick = () => inp.click();
 
@@ -1797,7 +1827,7 @@ inp.className = "hidden";
     URL.revokeObjectURL(url);
   };
 
-  root.append(btnImport, btnExport, inp);
+ root.append(btnImport, btnExport, btnWipeMeetings, btnWipeTravel, inp);
   $("#importExport").innerHTML = "";
   $("#importExport").append(root);
 }
@@ -1853,9 +1883,8 @@ t_save.onclick = async () => {
     alert('Save failed.');
   }
 };
-setLogoBtn.addEventListener('click', () => {
-  logoFile.click();
-});
+
+
 
 logoFile.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
@@ -1952,30 +1981,17 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
   onSharedDoc('logoUrl', v => { logoUrl = v || ""; renderLogo(); });
 
   // Realtime meetings (subcollection)
-  MEETINGS.orderBy('startISO').onSnapshot(async snap => {
-    if (snap.empty) {
-      // Optional seed once on first run
-      const batch = db.batch();
-      SAMPLE_MEETINGS.forEach(m => batch.set(MEETINGS.doc(m.id), m));
-      await batch.commit();
-      return;
-    }
-    meetings = snap.docs.map(d => d.data());
- const mDays = daysFromCalendar();
- if (mDays.length && !mDays.some(d => sameDay(d, activeDate))) activeDate = mDays[0];
- renderAll();
-  });
+MEETINGS.orderBy('startISO').onSnapshot(snap => {
+  meetings = snap.docs.map(d => d.data());
+  const mDays = daysFromCalendar();
+  if (mDays.length && !mDays.some(d => sameDay(d, activeDate))) activeDate = mDays[0];
+  renderAll();
+});
 // Realtime travel (subcollection)
-  TRAVEL.orderBy('startISO').onSnapshot(async snap => {
-    if (snap.empty) {
-      const batch = db.batch();
-      SAMPLE_TRAVEL.forEach(t => batch.set(TRAVEL.doc(t.id), t));
-      await batch.commit();
-      return;
-    }
-    travel = snap.docs.map(d => d.data());
-    renderTravel();
-  });
+TRAVEL.orderBy('startISO').onSnapshot(snap => {
+  travel = snap.docs.map(d => d.data());
+  renderTravel();
+});
 
   renderAll(); // first paint
 })();
