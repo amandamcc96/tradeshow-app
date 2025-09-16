@@ -397,6 +397,7 @@ header .tools .btn {
   <!-- Firebase compat SDKs (no build step) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script>
   const firebaseConfig = {
     apiKey: "AIzaSyAefJL7N3PBdQeGJWwjJZjfEQC8qUcpT5U",
@@ -407,6 +408,15 @@ header .tools .btn {
     appId: "1:865900601935:web:82a7b49e70f8088d40003a"
   };
   if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    <script>
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  // Sign in anonymously ASAP so writes are allowed
+  firebase.auth().signInAnonymously().catch(err => {
+    console.error('Anon auth failed:', err);
+    alert('Could not sign in (anon). Check Firebase Auth settings.');
+  });
+</script>
+
 
   const db = firebase.firestore();
   const COL = db.collection('tradeshow');
