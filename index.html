@@ -1748,7 +1748,7 @@ inp.className = "hidden";
   btnImport.onclick = () => inp.click();
 
   // IMPORT
-  inp.onchange = async (e) => {
+inp.onchange = async (e) => {
   const f = e.target.files?.[0];
   if (!f) return;
 
@@ -1760,14 +1760,15 @@ inp.className = "hidden";
 
     // --- helper to merge by 'id' and skip stale docs (older updatedAtMs) ---
     async function mergeCollection(colRef, incoming) {
-      // build a map of current docs
+      if (!incoming.length) return;
+
       const curSnap = await colRef.get();
       const curMap = new Map(curSnap.docs.map(d => [d.id, d.data()]));
 
       const batch = db.batch();
+      let writes = 0;
 
       for (const obj of incoming) {
-        // ensure an id
         const id = obj.id || uid();
         obj.id = id;
 
@@ -1775,31 +1776,29 @@ inp.className = "hidden";
         const incomingUpdated = obj.updatedAtMs ?? 0;
         const existingUpdated = existing?.updatedAtMs ?? 0;
 
-        // only write if:
-        //  - new doc OR
-        //  - incoming is same/newer than existing
         if (!existing || incomingUpdated >= existingUpdated) {
-          // never drop fields that already exist in Firestore: merge: true
           batch.set(colRef.doc(id), obj, { merge: true });
+          writes++;
         }
       }
 
-      await batch.commit();
+      if (writes) await batch.commit();
     }
 
-    // Merge-only; do NOT delete anything
     await mergeCollection(MEETINGS, meetingsIn);
     await mergeCollection(TRAVEL,   travelIn);
     await mergeCollection(SESSIONS, sessionsIn);
 
-    // Small settings (merge is fine here too)
     if ('gptUrl'  in parsed) await setSharedDoc('gptUrl',  parsed.gptUrl  || '');
     if ('logoUrl' in parsed) await setSharedDoc('logoUrl', parsed.logoUrl || '');
 
     alert('Import complete (merged). Local edits preserved.');
-  } catch(err) {
+  } catch (err) {
     console.error(err);
-    alert("Invalid JSON file");
+    const msg = err?.name === 'SyntaxError'
+      ? 'Invalid JSON: ' + err.message
+      : (err.code || err.message || 'unknown error');
+    alert('Import failed: ' + msg);
   } finally {
     inp.value = '';
   }
