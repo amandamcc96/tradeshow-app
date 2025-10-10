@@ -1,4 +1,21 @@
-<!DOCTYPE html>
+/* Smooth rounded corners for GPT panel and chat area */
+#view-gpt #gptPanel.card {
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* Round the chat area and input for cohesive style */
+#view-gpt #chatWindow {
+  border-radius: 20px;
+}
+
+#view-gpt #chatForm input {
+  border-radius: 20px;
+}
+
+#view-gpt #chatForm .btn {
+  border-radius: 20px;
+}<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -473,19 +490,30 @@ header h1, header .muted { color:#fff; }
   border-radius: 20px;
   overflow: hidden;
 }
-
-/* Round the chat area and input for cohesive style */
-#view-gpt #chatWindow {
-  border-radius: 20px;
+/* One rounded container for the whole chat area */
+#chatShell{
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:14px;            /* ← the rounded edges you want */
+  overflow:hidden;               /* keeps inner corners clean */
+  box-shadow: var(--shadow);     /* optional: subtle lift */
 }
 
-#view-gpt #chatForm input {
-  border-radius: 20px;
+/* Inside the shell */
+#chatWindow{
+  background:#fff;
+  border:none !important;
+  border-bottom:1px solid var(--border);  /* divider above input row */
 }
 
-#view-gpt #chatForm .btn {
-  border-radius: 20px;
+#chatForm{
+  background:#fff;
+  padding:12px;
 }
+
+/* Optional: make input/buttons rounded to match */
+#chatInput{ border-radius:10px; }
+#chatSend{ border-radius:10px; }
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
