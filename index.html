@@ -420,6 +420,7 @@ header .tools .btn {
 #detailsStandalone [id^="detail-"] .card-c {
   display: none !important;
 }
+    #gptPanel .gpt-head { align-items: center; justify-content: space-between; }
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -482,6 +483,10 @@ header .tools .btn {
   <div id="gptPanel" class="card">
     <div class="card-h">
       <div class="title">🤖 Ask Our GPT</div>
+       <div class="tools">
+          <button class="btn sm" id="openGptBtn" title="Open your personal GPT">🔗 Open our GPT</button>
+        </div>
+      </div>
       <div class="desc">Ask about your schedule, meetings, or travel.</div>
     </div>
     <div class="card-c">
@@ -868,7 +873,41 @@ const chatWindow = document.getElementById("chatWindow");
 const chatForm   = document.getElementById("chatForm");
 const chatInput  = document.getElementById("chatInput");
 const chatSend   = document.getElementById("chatSend");
+// --- GPT Link wiring (place with other const element bindings) ---
+const openGptBtn = document.getElementById("openGptBtn");
+const gptDialog  = document.getElementById("gptDialog");
+const gptInput   = document.getElementById("gptInput");
+const gptSave    = document.getElementById("gptSave");
+const gptCancel  = document.getElementById("gptCancel");
 
+// keep local state updated if changed elsewhere
+onSharedDoc('gptUrl', v => { gptUrl = v || ""; });
+
+// open personal GPT (or prompt to set it)
+openGptBtn.onclick = () => {
+  if (gptUrl && /^https?:\/\//i.test(gptUrl)) {
+    window.open(gptUrl, "_blank", "noopener,noreferrer");
+  } else {
+    gptInput.value = gptUrl || "";
+    gptDialog.showModal();
+  }
+};
+
+// save from dialog
+gptSave.onclick = async () => {
+  let url = (gptInput.value || "").trim();
+  if (!url) { gptDialog.close(); return; }
+  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+  try {
+    await setSharedDoc("gptUrl", url);
+    gptUrl = url;
+  } catch (err) {
+    alert("Could not save GPT link: " + (err.code || err.message || "unknown error"));
+  } finally {
+    gptDialog.close();
+  }
+};
+gptCancel.onclick = () => gptDialog.close();
 function appendMsg(role, text){
   const row = document.createElement("div");
   row.className = `msg ${role}`;
