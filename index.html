@@ -467,7 +467,7 @@ header .tools .btn {
 <section id="view-gpt">
   <div id="gptPanel" class="card">
     <div class="card-h">
-      <div class="title">🤖 Assistant</div>
+      <div class="title">🤖 Ask Our GPT</div>
       <div class="desc">Ask about your schedule, meetings, or travel.</div>
     </div>
     <div class="card-c">
@@ -481,7 +481,8 @@ header .tools .btn {
       </div>
      </div> <!-- close .card-c -->
   </div> 
-  <section id="view-meetings" class="hidden">
+</section>
+      <section id="view-meetings" class="hidden">
   <div class="card">
     <div class="card-h">
       <div class="title">🧑‍🤝‍🧑 Meeting details</div>
@@ -492,19 +493,17 @@ header .tools .btn {
     </div>
   </div>
 </section>
-</section>
-    <section id="view-travel" class="hidden">
-<div id="travelCard" class="card">
-  <div class="card-h">
-    <div class="row">
-      <div class="title">✈️ Travel</div>
-      <button id="travelCollapseBtn" class="btn icon" aria-expanded="true" title="Collapse/expand">▾</button>
+<section id="view-travel" class="hidden">
+  <div id="travelCard" class="card">
+    <div class="card-h">
+      <div class="row">
+        <div class="title">✈️ Travel</div>
+        <button id="travelCollapseBtn" class="btn icon" aria-expanded="true" title="Collapse/expand">▾</button>
+      </div>
+      <div class="desc">Store flight, hotel, and ground confirmations.</div>
     </div>
-    <div class="desc">Store flight, hotel, and ground confirmations.</div>
+    <div class="card-c" id="travelSection"></div>
   </div>
-  <div class="card-c" id="travelSection"></div>
-  </div>        <!-- close .card-c -->
- </div>          <!-- close #gptPanel.card -->
 </section>
     <section id="view-schedule">
     <div class="grid">
@@ -768,6 +767,30 @@ function renderNotes(text){
   el.classList.add("pulse");
   setTimeout(() => el.classList.remove("pulse"), 1200);
 }
+    // "now" in your app TZ
+function nowInTZISO(){
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
+  }).formatToParts(new Date()).reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
+  // YYYY-MM-DDTHH:mm:ss in TZ; treat as local wall-clock reference
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}:00`;
+}
+
+// Choose the "most current" calendar day bucket:
+// - first day >= now (in TZ), else the last day available
+function pickMostCurrentDay(days){ // days = ISO start-of-item values from daysFromCalendar()
+  if (!days || !days.length) return null;
+  const now = new Date(); // wall clock; days already represent real dates in TZ
+  // find first day that is today-or-future in TZ
+  for (const d of days){
+    // compare by YMD in TZ
+    const dY = ymdInTZ(d);
+    const nowY = ymdInTZ(now.toISOString());
+    if (dY >= nowY) return d;
+  }
+  return days[days.length - 1];
+}
    // seed
     const seedDate = (()=>{
       const now = new Date();
@@ -792,6 +815,7 @@ function deleteTravel(id){ return TRAVEL.doc(id).delete(); }
  let gptUrl   = "";
 let logoUrl = "";
     let meetings = [];
+    
 let travel   = [];
     let activeDate = new Date().toISOString();
     let view = "agenda";
@@ -1179,10 +1203,20 @@ function deleteSession(id){ return SESSIONS.doc(id).delete(); }
 
 // State
 let sessions = [];
- SESSIONS.orderBy('startISO').onSnapshot(async snap => {
+    let autoPickedDayOnce = false; 
+SESSIONS.orderBy('startISO').onSnapshot(async snap => {
   sessions = snap.docs.map(d => d.data());
+
   const sDays = daysFromCalendar();
-  if (sDays.length && !sDays.some(d => sameDay(d, activeDate))) activeDate = sDays[0];
+  // If no active day yet or it fell off-screen, pick the most current day.
+  if (sDays.length && (!sDays.some(d => sameDay(d, activeDate)) || !autoPickedDayOnce)) {
+    const best = pickMostCurrentDay(sDays);
+    if (best) {
+      activeDate = best;
+      autoPickedDayOnce = true;
+    }
+  }
+
   renderAll();
 });
 function itemsForDay(iso){
@@ -1402,34 +1436,28 @@ if (it.kind === "meeting") {
   hourlyGrid.append(wrap);
 }
 
-function renderDetails(){
-    const target = root || detailsCol; 
-  detailsCol.innerHTML = "";
-const dayMeetings = meetings
-  .filter(m =>
-    // normal same-day meetings
-    sameDay(m.startISO, activeDate) ||
-    // ALSO include Date TBD meetings when viewing the anchor day
-    (m.dateTBD && isAnchorDay(activeDate))
-  )
-  .sort((a,b) => {
-    // Optional: show Date TBD first
-    if (a.dateTBD && !b.dateTBD) return -1;
-    if (!a.dateTBD && b.dateTBD) return 1;
-    return new Date(a.startISO) - new Date(b.startISO);
-  });
-  if(dayMeetings.length===0){
+function renderDetails(target = detailsCol){
+  target.innerHTML = "";
+
+  const dayMeetings = meetings
+    .filter(m =>
+      sameDay(m.startISO, activeDate) ||
+      (m.dateTBD && isAnchorDay(activeDate))
+    )
+    .sort((a,b) => (a.dateTBD?-1:0) - (b.dateTBD?-1:0) || (new Date(a.startISO)-new Date(b.startISO)));
+
+  if (dayMeetings.length === 0){
     const card = document.createElement("div"); card.className="card";
     card.innerHTML = `<div class="card-h"><div class="title">No meetings this day</div></div>
                       <div class="card-c muted">Add one using the button on the left.</div>`;
-    detailsCol.append(card);
+    target.append(card);
     return;
   }
 
   dayMeetings.forEach(m => {
-    const card = document.createElement("div"); 
+    const card = document.createElement("div");
     card.className = "card";
-card.id = `detail-${m.id}`;
+    card.id = `detail-${m.id}`;
 
     const head = document.createElement("div"); 
     head.className = "card-h";
@@ -1528,7 +1556,7 @@ rightT.textContent = `${dateLabel} • ${timePart}`;
     inner.append(rightCol, leftCol);
     c.append(inner);
     card.append(head, c);
-    detailsCol.append(card);
+target.append(card);
   });
 }
 function updateTbdUI(){
@@ -1876,7 +1904,7 @@ inp.onchange = async (e) => {
 
       if (writes) await batch.commit();
     }
-
+autoPickedDayOnce = false;
     await mergeCollection(MEETINGS, meetingsIn);
     await mergeCollection(TRAVEL,   travelIn);
     await mergeCollection(SESSIONS, sessionsIn);
@@ -2081,10 +2109,18 @@ function renderAll(){
   // Realtime meetings (subcollection)
 MEETINGS.orderBy('startISO').onSnapshot(snap => {
   meetings = snap.docs.map(d => d.data());
+
   const mDays = daysFromCalendar();
-  if (mDays.length && !mDays.some(d => sameDay(d, activeDate))) activeDate = mDays[0];
+  if (mDays.length && (!mDays.some(d => sameDay(d, activeDate)) || !autoPickedDayOnce)) {
+    const best = pickMostCurrentDay(mDays);
+    if (best) {
+      activeDate = best;
+      autoPickedDayOnce = true;
+    }
+  }
+
   renderAll();
-  switchTopTab(activeTopTab); // keep current selection after every render
+  switchTopTab(activeTopTab);
 });
 // Realtime travel (subcollection)
 TRAVEL.orderBy('startISO').onSnapshot(snap => {
