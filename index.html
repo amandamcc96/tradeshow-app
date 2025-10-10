@@ -392,6 +392,20 @@ header .tools .btn {
 .chip input { margin-right:6px; }
     .item.meeting.clickable { cursor: pointer; }
 .pulse { outline: 2px solid var(--blue); box-shadow: 0 0 0 4px var(--primary-50); transition: box-shadow .2s ease; }
+    .top-tabs{
+  display:flex; gap:8px; align-items:center; margin:12px 0 16px;
+}
+.top-tabs .tab{
+  padding:8px 12px; border:1px solid var(--border); background:#fff; cursor:pointer;
+  border-radius:999px; font-weight:600;
+}
+.top-tabs .tab.active{
+  background:var(--primary); color:#fff; border-color:var(--primary);
+}
+    .msg{display:flex; gap:8px; margin:8px 0;}
+.msg .who{font-weight:700; width:64px; flex:0 0 auto; color:var(--muted);}
+.msg .bubble{background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px; max-width:100%;}
+.msg.assistant .bubble{ background: var(--primary-50); }
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -428,6 +442,11 @@ header .tools .btn {
 <body>
   <div class="container">
   <header>
+    <div id="topTabs" class="top-tabs">
+  <button class="tab" data-toptab="gpt">🤖 GPT</button>
+  <button class="tab" data-toptab="schedule">📆 Schedule</button>
+  <button class="tab" data-toptab="travel">✈️ Travel</button>
+</div>
   <div class="head-left">
     <h1>
       <!-- Logo replaces the emoji -->
@@ -443,19 +462,25 @@ header .tools .btn {
     <div id="importExport"></div>
   </div>
 </header>
-<div id="gptCard" class="card">
-  <div class="card-h">
-    <div class="row gpt-head">
-      <div class="title">🔗 Ask our GPT</div>
-      <div class="tools">
-        <a id="openGpt" class="btn sm" href="#" target="_blank" rel="noreferrer">Open GPT</a>
-        <button id="setGptBtn" class="btn sm">⚙️ Set Link</button>
-        
-      </div>
+<section id="view-gpt">
+  <div id="gptPanel" class="card">
+    <div class="card-h">
+      <div class="title">🤖 Assistant</div>
+      <div class="desc">Ask about your schedule, meetings, or travel.</div>
     </div>
-    <div id="gptHint" class="desc">No link set yet. Click <em>Set Link</em> to add one.</div>
-  </div>
-</div>
+    <div class="card-c">
+      <div id="chatWindow" style="height:320px; overflow:auto; border:1px solid var(--border); border-radius:12px; padding:12px;"></div>
+      <form id="chatForm" class="row" style="margin-top:12px; gap:8px;">
+        <input id="chatInput" placeholder="Type your question…" />
+        <button class="btn primary" id="chatSend" type="submit">Send</button>
+      </form>
+      <div class="muted" style="font-size:12px;margin-top:6px;">
+        Tip: “What’s on my agenda today?” or “Summarize my meetings with Acme.”
+      </div>
+     </div> <!-- close .card-c -->
+  </div> 
+</section>
+    <section id="view-travel" class="hidden">
 <div id="travelCard" class="card">
   <div class="card-h">
     <div class="row">
@@ -465,7 +490,10 @@ header .tools .btn {
     <div class="desc">Store flight, hotel, and ground confirmations.</div>
   </div>
   <div class="card-c" id="travelSection"></div>
-</div>
+  </div>        <!-- close .card-c -->
+ </div>          <!-- close #gptPanel.card -->
+</section>
+    <section id="view-schedule">
     <div class="grid">
       <!-- Left -->
       <div class="col gap16">
@@ -499,8 +527,7 @@ header .tools .btn {
         
       <!-- Right -->
       <div class="col gap16" id="detailsCol"></div>
-    </div>
-  </div>
+      
 
   <!-- Dialogs -->
   <dialog id="logoDialog">
@@ -766,9 +793,7 @@ let travel   = [];
     const hourlyGrid = $("#hourlyGrid");
     const addMeetingBtn = $("#addMeetingBtn");
     const detailsCol = $("#detailsCol");
-    const openGptA = $("#openGpt");
-    const setGptBtn = $("#setGptBtn");
-    const gptHint = $("#gptHint");
+  
     const travelSection = $("#travelSection");
     const t_rowDateTime = $("#t_rowDateTime");
 const t_rowDateOnly = $("#t_rowDateOnly");
@@ -780,7 +805,79 @@ const t_endDate     = $("#t_endDate");
   t_rowDateOnly.classList.toggle("hidden", !isHotel);
 }
 const travelCollapseBtn = $("#travelCollapseBtn");
+const TOP_TABS = ["schedule","travel","gpt"];
+let activeTopTab = localStorage.getItem("activeTopTab") || "gpt";
+// --- Assistant chat (front-end) ---
+const chatWindow = document.getElementById("chatWindow");
+const chatForm   = document.getElementById("chatForm");
+const chatInput  = document.getElementById("chatInput");
+const chatSend   = document.getElementById("chatSend");
 
+function appendMsg(role, text){
+  const row = document.createElement("div");
+  row.className = `msg ${role}`;
+  row.innerHTML = `<div class="who">${role === "user" ? "You" : "Assistant"}</div>
+                   <div class="bubble">${escapeHtml(text).replace(/\n/g,'<br>')}</div>`;
+  chatWindow.appendChild(row);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+chatForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const content = chatInput.value.trim();
+  if (!content) return;
+
+  appendMsg("user", content);
+  chatInput.value = "";
+  chatInput.disabled = true; chatSend.disabled = true;
+
+  // Optional: pass lightweight context so the bot can answer “what’s next?” etc.
+  const ctx = {
+    date: fmtDate(activeDate),
+    meetings: itemsForDay(activeDate).filter(x => x.kind==="meeting").map(m => ({
+      title: m.title,
+      start: m.timeTBD ? "TBD" : fmtTime(m.startISO),
+      end:   m.timeTBD ? "TBD" : fmtTime(m.endISO),
+      location: displayLocation(m) || "",
+      booth: m.booth || ""
+    })),
+    travel: travel.map(t => ({
+      type: t.type, label: t.label,
+      start: t.startISO || "", end: t.endISO || ""
+    }))
+  };
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: content, context: ctx })
+    });
+    if (!res.ok) throw new Error("Request failed");
+    const data = await res.json(); // { reply: "..." }
+    appendMsg("assistant", data.reply || "(no reply)");
+  } catch (err){
+    console.error(err);
+    appendMsg("assistant", "Sorry, I couldn’t reach the assistant.");
+  } finally {
+    chatInput.disabled = false; chatSend.disabled = false; chatInput.focus();
+  }
+});
+function switchTopTab(name){
+  if(!TOP_TABS.includes(name)) name = "schedule";
+  activeTopTab = name;
+  localStorage.setItem("activeTopTab", name);
+
+  // sections
+  $("#view-schedule").classList.toggle("hidden", name!=="schedule");
+  $("#view-travel").classList.toggle("hidden",   name!=="travel");
+  $("#view-gpt").classList.toggle("hidden",      name!=="gpt");
+
+  // buttons
+  $$("#topTabs .tab").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.toptab === name);
+  });
+}
 function setTravelCollapsed(collapsed, persist = true){
   $("#travelSection").classList.toggle("hidden", collapsed);
   travelCollapseBtn.setAttribute("aria-expanded", String(!collapsed));
@@ -1016,11 +1113,6 @@ function collectAttendeesFromEditor(){
     };
   });
 }
-
-    const gptDialog = $("#gptDialog");
-    const gptInput = $("#gptInput");
-    const gptSave = $("#gptSave");
-    const gptCancel = $("#gptCancel");
 const t_label = $("#t_label");
     const travelDialog = $("#travelDialog");
     const t_type = $("#t_type");
@@ -1660,22 +1752,6 @@ async function saveMeetingFromDialog(){
   }
 }
 
-    function renderGpt(){
-  const has = !!gptUrl;
-  if (has){
-    openGptA.href = gptUrl;
-    openGptA.removeAttribute('disabled');
-    openGptA.classList.add('lg');          // make it bigger
-    gptHint.style.display = "none";
-    setGptBtn.style.display = "none";      // hide Set Link when set
-  }else{
-    openGptA.href = "#";
-    openGptA.setAttribute('disabled', ''); // no link yet
-    openGptA.classList.remove('lg');
-    gptHint.style.display = "block";
-    setGptBtn.style.display = "inline-flex";
-  }
-}
 function renderLogo(){
   if (!logoUrl) {
     brandLogo.removeAttribute('src');
@@ -1747,6 +1823,7 @@ inp.className = "hidden";
   };
 
   btnImport.onclick = () => inp.click();
+
 
   // IMPORT
 inp.onchange = async (e) => {
@@ -1840,9 +1917,7 @@ inp.onchange = async (e) => {
     dlgCancel.onclick = ()=> meetingDialog.close();
     dlgSave.onclick = ()=> saveMeetingFromDialog();
 
-    setGptBtn.onclick = ()=>{ gptInput.value = gptUrl || ""; gptDialog.showModal(); };
-    gptCancel.onclick = ()=> gptDialog.close();
-    gptSave.onclick = async ()=>{ gptUrl = (gptInput.value||"").trim(); await setSharedDoc('gptUrl', gptUrl); gptDialog.close(); };
+ 
 
     t_cancel.onclick = ()=> travelDialog.close();
     t_type.addEventListener("change", updateTravelDateInputs);
@@ -1884,7 +1959,10 @@ t_save.onclick = async () => {
   }
 };
 
-
+// Top tab switching
+$$("#topTabs .tab").forEach(btn => {
+  btn.onclick = () => switchTopTab(btn.dataset.toptab);
+});
 
 logoFile.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
@@ -1963,7 +2041,7 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
                       : (hourlyGrid.classList.remove("hidden"), agendaList.classList.add("hidden"), renderHourly()));
       renderDetails();
       renderTravel();
-      renderGpt();
+  
         renderLogo();  
       renderImportExport();
       
@@ -1974,10 +2052,9 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
   // One-time simple settings
   gptUrl  = (await getSharedDoc('gptUrl',  "")) || "";
   logoUrl = (await getSharedDoc('logoUrl', "")) || "";
-  renderGpt(); renderLogo();
+ renderLogo();
 
   // Live settings
-  onSharedDoc('gptUrl',  v => { gptUrl  = v || ""; renderGpt(); });
   onSharedDoc('logoUrl', v => { logoUrl = v || ""; renderLogo(); });
 
   // Realtime meetings (subcollection)
@@ -1986,6 +2063,7 @@ MEETINGS.orderBy('startISO').onSnapshot(snap => {
   const mDays = daysFromCalendar();
   if (mDays.length && !mDays.some(d => sameDay(d, activeDate))) activeDate = mDays[0];
   renderAll();
+  switchTopTab(activeTopTab); // keep current selection after every render
 });
 // Realtime travel (subcollection)
 TRAVEL.orderBy('startISO').onSnapshot(snap => {
@@ -1994,6 +2072,7 @@ TRAVEL.orderBy('startISO').onSnapshot(snap => {
 });
 
   renderAll(); // first paint
+      switchTopTab(activeTopTab); 
 })();
 })();
   </script>
