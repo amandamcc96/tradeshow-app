@@ -411,6 +411,15 @@ header .tools .btn {
 #detailsStandalone .card .card-c {
   display: none !important;
 }
+    /* Hide ONLY the long details body under the header on any details card */
+[id^="detail-"] .card-c { 
+  display: none !important;
+}
+
+/* If you're using the Meetings tab mirror, belt & suspenders */
+#detailsStandalone [id^="detail-"] .card-c {
+  display: none !important;
+}
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
