@@ -651,7 +651,7 @@ header .tools .btn {
     const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
     const uid = () => Math.random().toString(36).slice(2,9);
-   const TZ = 'America/New_York';
+   const TZ = 'America/Los_Angeles';
 
    const fmtTime = (iso) =>
   new Date(iso).toLocaleTimeString([], {
@@ -1374,8 +1374,8 @@ tbdToday.forEach(it => {
     wrap.append(row);
   }
     
-  // --- Hourly grid (ET) ---
-  const startHour = 7;        // 7 AM ET
+  // --- Hourly grid (PT) ---
+  const startHour = 7;        // 7 AM PT
   const hoursToShow = 17;     // 7am–11pm
 
   const labelFromHour = (hr) => {
