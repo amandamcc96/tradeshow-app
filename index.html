@@ -1512,14 +1512,14 @@ function renderDetails(target = detailsCol, mode = "day"){
     t.append(leftT, rightT);
     head.append(t);
 
-    // Sub-desc (duration + location)
-    const desc = document.createElement("div");
-    desc.className = "desc";
-    const where = displayLocation(m);
-    const dur = (!m.dateTBD && !m.timeTBD) ? `${hoursBetween(m.startISO, m.endISO).toFixed(1)} hrs` : "TBD";
-    desc.textContent = where ? `${dur} • ${where}` : dur;
-    head.append(desc);
 
+ const where = displayLocation(m);
+if (where) {
+  const locLine = document.createElement("div");
+  locLine.className = "desc";
+  locLine.textContent = where;   // location only
+  head.append(locLine);
+}
     // Body (unchanged)
     const c = document.createElement("div"); 
     c.className = "card-c";
