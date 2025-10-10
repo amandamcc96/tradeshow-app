@@ -446,6 +446,7 @@ header .tools .btn {
   <button class="tab" data-toptab="gpt">🤖 GPT</button>
   <button class="tab" data-toptab="schedule">📆 Schedule</button>
   <button class="tab" data-toptab="travel">✈️ Travel</button>
+        <button class="tab" data-toptab="meetings">🧑‍🤝‍🧑 Meetings</button>
 </div>
   <div class="head-left">
     <h1>
@@ -479,6 +480,17 @@ header .tools .btn {
       </div>
      </div> <!-- close .card-c -->
   </div> 
+  <section id="view-meetings" class="hidden">
+  <div class="card">
+    <div class="card-h">
+      <div class="title">🧑‍🤝‍🧑 Meeting details</div>
+      <div class="desc">All meeting cards for the active day.</div>
+    </div>
+    <div class="card-c">
+      <div class="col gap16" id="detailsStandalone"></div>
+    </div>
+  </div>
+</section>
 </section>
     <section id="view-travel" class="hidden">
 <div id="travelCard" class="card">
@@ -805,7 +817,7 @@ const t_endDate     = $("#t_endDate");
   t_rowDateOnly.classList.toggle("hidden", !isHotel);
 }
 const travelCollapseBtn = $("#travelCollapseBtn");
-const TOP_TABS = ["schedule","travel","gpt"];
+const TOP_TABS = ["schedule","travel","gpt","meetings"];
 let activeTopTab = localStorage.getItem("activeTopTab") || "gpt";
 // --- Assistant chat (front-end) ---
 const chatWindow = document.getElementById("chatWindow");
@@ -872,7 +884,7 @@ function switchTopTab(name){
   $("#view-schedule").classList.toggle("hidden", name!=="schedule");
   $("#view-travel").classList.toggle("hidden",   name!=="travel");
   $("#view-gpt").classList.toggle("hidden",      name!=="gpt");
-
+  $("#view-meetings").classList.toggle("hidden", name!=="meetings");
   // buttons
   $$("#topTabs .tab").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.toptab === name);
@@ -1390,6 +1402,7 @@ if (it.kind === "meeting") {
 }
 
 function renderDetails(){
+    const target = root || detailsCol; 
   detailsCol.innerHTML = "";
 const dayMeetings = meetings
   .filter(m =>
@@ -2035,18 +2048,25 @@ function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
     reader.readAsDataURL(file);
   });
 }
-    function renderAll(){
-      renderHeaderControls();
-      (view==="agenda"? (agendaList.classList.remove("hidden"), hourlyGrid.classList.add("hidden"), renderAgenda())
-                      : (hourlyGrid.classList.remove("hidden"), agendaList.classList.add("hidden"), renderHourly()));
-      renderDetails();
-      renderTravel();
-  
-        renderLogo();  
-      renderImportExport();
-      
-    }
+function renderAll(){
+  renderHeaderControls();
+  (view==="agenda"
+    ? (agendaList.classList.remove("hidden"), hourlyGrid.classList.add("hidden"), renderAgenda())
+    : (hourlyGrid.classList.remove("hidden"), agendaList.classList.add("hidden"), renderHourly()));
 
+  // Right-column details (Schedule view)
+  renderDetails();
+
+  // If Meetings tab is active, mirror details into the standalone container
+  const ds = $("#detailsStandalone");
+  if (ds && activeTopTab === "meetings") {
+    renderDetails(ds);
+  }
+
+  renderTravel();
+  renderLogo();
+  renderImportExport();
+}
     // INITIAL LOAD from Firestore + realtime subscriptions
     (async function init(){
   // One-time simple settings
