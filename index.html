@@ -406,19 +406,11 @@ header .tools .btn {
 .msg .who{font-weight:700; width:64px; flex:0 0 auto; color:var(--muted);}
 .msg .bubble{background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px; max-width:100%;}
 .msg.assistant .bubble{ background: var(--primary-50); }
-/* Hide details body so only title, time, and location show */
-#detailsCol .card .card-c,
-#detailsStandalone .card .card-c {
-  display: none !important;
-}
-    /* Hide ONLY the long details body under the header on any details card */
-[id^="detail-"] .card-c { 
-  display: none !important;
-}
 
-/* If you're using the Meetings tab mirror, belt & suspenders */
-#detailsStandalone [id^="detail-"] .card-c {
-  display: none !important;
+/* Hide the long body only in the Schedule view's right column.
+   The Meetings tab (detailsStandalone) will show full details. */
+#view-schedule #detailsCol .card .card-c {
+  display: none;
 }
     /* --- Make GPT chat area white --- */
 #view-gpt {
@@ -476,6 +468,24 @@ header .tools{ justify-self:end; }
 
 /* keep header text readable on the blue background */
 header h1, header .muted { color:#fff; }
+    /* Smooth rounded corners for GPT panel and chat area */
+#view-gpt #gptPanel.card {
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* Round the chat area and input for cohesive style */
+#view-gpt #chatWindow {
+  border-radius: 20px;
+}
+
+#view-gpt #chatForm input {
+  border-radius: 20px;
+}
+
+#view-gpt #chatForm .btn {
+  border-radius: 20px;
+}
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -1684,7 +1694,7 @@ if (where) {
 
     inner.append(rightCol, leftCol);
     c.append(inner);
-card.append(head);
++ card.append(head, c);
     target.append(card);
   });
 }
