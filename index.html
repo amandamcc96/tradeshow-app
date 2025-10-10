@@ -449,6 +449,33 @@ header .tools .btn {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   background-color: #ffffff;
 }
+    /* Header: 3-column grid — tabs | centered title/logo | utilities  */
+header{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:16px;
+}
+
+/* left column (tabs) stays left */
+#topTabs{ justify-self:start; }
+
+/* center column (logo + title) */
+.head-left{
+  justify-self:center;
+  text-align:center;
+}
+
+/* make the H1 content itself centered horizontally */
+.head-left h1{
+  justify-content:center;   /* center the logo + text row */
+}
+
+/* right column (import/export buttons) stays right */
+header .tools{ justify-self:end; }
+
+/* keep header text readable on the blue background */
+header h1, header .muted { color:#fff; }
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -956,7 +983,13 @@ function switchTopTab(name){
   if(!TOP_TABS.includes(name)) name = "schedule";
   activeTopTab = name;
   localStorage.setItem("activeTopTab", name);
-
+const meetingsDescEl = document.querySelector('#view-meetings .card-h .desc');
+if (meetingsDescEl) {
+  meetingsDescEl.textContent =
+    (name === "meetings")
+      ? "All upcoming meetings (includes Date-TBD)."
+      : "All meeting cards for the active day.";
+}
   // sections
   $("#view-schedule").classList.toggle("hidden", name!=="schedule");
   $("#view-travel").classList.toggle("hidden",   name!=="travel");
@@ -2182,10 +2215,10 @@ function renderAll(){
   // Right-column details (Schedule view)
   renderDetails();
 
-  // If Meetings tab is active, mirror details into the standalone container
- const ds = $("#detailsStandalone");
-if (ds && activeTopTab === "meetings") {
-  renderDetails(ds, "all");  // show ALL upcoming + Date-TBD
+// Always pre-render the Meetings tab with the full detail cards (includes attendees)
+const ds = $("#detailsStandalone");
+if (ds) {
+  renderDetails(ds, "all");   // ✅ full cards + attendees for ALL upcoming
 }
 
   renderTravel();
