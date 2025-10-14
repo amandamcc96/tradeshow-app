@@ -527,7 +527,17 @@ header h1, header .muted { color:#fff; }
 
   const db = firebase.firestore();
   const COL = db.collection('tradeshow');
-
+const LS_KEY_GPT = "gptUrl";
+const getLocalGptUrl = () => {
+  openGptBtn.textContent = gptUrl ? "🔗 Open our GPT" : "🔗 Set GPT link";
+  try { return localStorage.getItem(LS_KEY_GPT) || ""; } catch { return ""; }
+};
+const setLocalGptUrl = (v) => {
+  try {
+    if (v) localStorage.setItem(LS_KEY_GPT, v);
+    else localStorage.removeItem(LS_KEY_GPT);
+  } catch {}
+};
   async function getSharedDoc(docId, fallback) {
     const snap = await COL.doc(docId).get();
     return snap.exists ? snap.data().value : fallback;
@@ -923,7 +933,8 @@ function upsertTravel(t){
 }
 function deleteTravel(id){ return TRAVEL.doc(id).delete(); }
     // state (will be replaced by Firestore values on load)
- let gptUrl   = "";
+let gptUrl = getLocalGptUrl() || "";
+    
 let logoUrl = "";
     let meetings = [];
     
@@ -1317,6 +1328,7 @@ const gptCancel  = document.getElementById("gptCancel");
 
 // keep local state updated if changed elsewhere
 onSharedDoc('gptUrl', v => { gptUrl = v || ""; 
+                              if (gptUrl) setLocalGptUrl(gptUrl); 
   openGptBtn.textContent = gptUrl ? "🔗 Open our GPT" : "🔗 Set GPT link";
 });
 function openGptSetter() {
@@ -1333,6 +1345,7 @@ function openGptSetter() {
 }
 
 openGptBtn.onclick = () => {
+  const url = gptUrl || getLocalGptUrl(); 
   if (gptUrl && /^https?:\/\//i.test(gptUrl)) {
     window.open(gptUrl, "_blank", "noopener,noreferrer");
   } else {
@@ -1347,7 +1360,12 @@ gptSave.onclick = async () => {
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
   try { await setSharedDoc("gptUrl", url); gptUrl = url; }
   catch (err) { alert("Could not save GPT link: " + (err.code || err.message || "unknown error")); }
-  finally { gptDialog.close(); }
+  finally  {
+      gptUrl = url;
+    setLocalGptUrl(url);                      // ← local fallback is the source of truth if needed
+    openGptBtn.textContent = "🔗 Open our GPT";
+    gptDialog.close();
+  }
 };
  function shiftDay(dir){
    const days = daysFromCalendar();
