@@ -1,5 +1,4 @@
-
-}<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -478,14 +477,6 @@ header h1, header .muted { color:#fff; }
   overflow:hidden;               /* keeps inner corners clean */
   box-shadow: var(--shadow);     /* optional: subtle lift */
 }
-
-/* Inside the shell */
-#chatWindow{
-  background:#fff;
-  border:none !important;
-  border-bottom:1px solid var(--border);  /* divider above input row */
-}
-
 #chatForm{
   background:#fff;
   padding:12px;
@@ -494,11 +485,7 @@ header h1, header .muted { color:#fff; }
 /* Optional: make input/buttons rounded to match */
 #chatInput{ border-radius:10px; }
 #chatSend{ border-radius:10px; }
-    /* Smooth rounded corners for GPT panel and chat area */
-#view-gpt #gptPanel.card {
-  border-radius: 20px;
-  overflow: hidden;
-}
+
 
 /* Round the chat area and input for cohesive style */
 #view-gpt #chatWindow {
@@ -512,6 +499,14 @@ header h1, header .muted { color:#fff; }
 #view-gpt #chatForm .btn {
   border-radius: 20px;
   }
+    /* Hide Travel tab + view */
+#topTabs .tab[data-toptab="travel"] { display: none !important; }
+#view-travel { display: none !important; }
+    /* optional: smaller contact chips in attendee cards */
+.attendee .chip {
+  padding: 4px 8px;
+  font-size: 12px;
+}
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -578,25 +573,18 @@ header h1, header .muted { color:#fff; }
           <button class="btn sm" id="openGptBtn" title="Open your personal GPT">🔗 Open our GPT</button>
         </div>
       </div>
-      <div class="desc">Ask about your schedule, meetings, or travel.</div>
-    </div>
-    <div class="card-c">
-      <div id="chatWindow" style="height:320px; overflow:auto; border:1px solid var(--border); border-radius:12px; padding:12px;"></div>
-      <form id="chatForm" class="row" style="margin-top:12px; gap:8px;">
-        <input id="chatInput" placeholder="Type your question…" />
-        <button class="btn primary" id="chatSend" type="submit">Send</button>
-      </form>
-      <div class="muted" style="font-size:12px;margin-top:6px;">
-        Tip: “What’s on my agenda today?” or “Summarize my meetings with Acme.”
-      </div>
-     </div> <!-- close .card-c -->
   </div> 
 </section>
-      <section id="view-meetings" class="hidden">
+<section id="view-meetings" class="hidden">
   <div class="card">
     <div class="card-h">
-      <div class="title">🧑‍🤝‍🧑 Meeting details</div>
-      <div class="desc"> All upcoming meetings (Date-TBD first).</div>
+      <div class="row">
+        <div class="title">🧑‍🤝‍🧑 Meeting details</div>
+        <div class="tools">
+          <button class="btn primary sm" id="mtabAddMeeting">➕ Add meeting</button>
+        </div>
+      </div>
+      <div class="desc">All upcoming meetings (Date-TBD first).</div>
     </div>
     <div class="card-c">
       <div class="col gap16" id="detailsStandalone"></div>
@@ -625,6 +613,16 @@ header h1, header .muted { color:#fff; }
             <div class="desc">Switch between an agenda and an hourly grid for any show day.</div>
           </div>
           <div class="card-c">
+            <!-- Dreamforce Sessions Agenda link -->
+<div style="margin-bottom:10px">
+  <a id="dfAgendaLink"
+     href="https://www.salesforce.com/dreamforce/sessions/"
+     target="_blank" rel="noopener"
+     class="link"
+     style="font-weight:600; text-decoration:underline;">
+    🔗 View the full Dreamforce Sessions Agenda
+  </a>
+</div>
             <div class="row">
               <div class="tools">
                 <button class="btn icon" id="prevDay" title="Previous day">◀</button>
@@ -956,8 +954,10 @@ const t_endDate     = $("#t_endDate");
   t_rowDateTime.classList.toggle("hidden", isHotel);
   t_rowDateOnly.classList.toggle("hidden", !isHotel);
 }
+    const mtabAddMeeting = document.getElementById("mtabAddMeeting");
+mtabAddMeeting?.addEventListener("click", () => openMeetingDialog());
 const travelCollapseBtn = $("#travelCollapseBtn");
-const TOP_TABS = ["schedule","travel","gpt","meetings"];
+const TOP_TABS = ["schedule","gpt","meetings"];
 let activeTopTab = localStorage.getItem("activeTopTab") || "gpt";
 // --- Assistant chat (front-end) ---
 const chatWindow = document.getElementById("chatWindow");
@@ -1077,7 +1077,15 @@ const addAttendeeBtn = $("#addAttendeeBtn");
 let currentAttendees = [];
 
 const blankAttendee = () => ({
-  id: uid(), name:"", title:"", company:"", linkedin:"", photoUrl:"", notes:""
+  id: uid(),
+  name: "",
+  title: "",
+  company: "",
+  linkedin: "",
+  photoUrl: "",
+  notes: "",
+  email: "",         // ← NEW
+  phone: ""          // ← NEW
 });
 function sanitizeUrl(u){
   if(!u) return "";
@@ -1125,119 +1133,136 @@ function buildAttendeeRow(a){
   row1.append(inName, inTitle);
 
   // Row 2: company + linkedin (+ Open button)
-  const row2 = document.createElement("div");
-  row2.className = "ae-two";
+ const row2 = document.createElement("div");
+row2.className = "ae-two";
 
-  const inCompany = document.createElement("input");
-  inCompany.placeholder = "Company";
-  inCompany.value = a.company || "";
-  inCompany.name = "a_company";
+const inCompany = document.createElement("input");
+inCompany.placeholder = "Company";
+inCompany.value = a.company || "";
+inCompany.name = "a_company";
 
-  const linkWrap = document.createElement("div");
-  linkWrap.className = "ae-linkwrap";
+const linkWrap = document.createElement("div");
+linkWrap.className = "ae-linkwrap";
 
-  const inLinkedin = document.createElement("input");
-  inLinkedin.placeholder = "LinkedIn URL (https://…)";
-  inLinkedin.value = a.linkedin || "";
-  inLinkedin.name = "a_linkedin";
+const inLinkedin = document.createElement("input");
+inLinkedin.placeholder = "LinkedIn URL (https://…)";
+inLinkedin.value = a.linkedin || "";
+inLinkedin.name = "a_linkedin";
 
-  const btnOpen = document.createElement("button");
-  btnOpen.className = "btn sm";
-  btnOpen.type = "button";
-  btnOpen.textContent = "🔗 Open";
+const btnOpen = document.createElement("button");
+btnOpen.className = "btn sm";
+btnOpen.type = "button";
+btnOpen.textContent = "🔗 Open";
+btnOpen.disabled = !inLinkedin.value.trim();
+
+btnOpen.onclick = () => {
+  const url = sanitizeUrl(inLinkedin.value);
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+inLinkedin.addEventListener("input", () => {
   btnOpen.disabled = !inLinkedin.value.trim();
+});
 
-  btnOpen.onclick = () => {
-    const url = sanitizeUrl(inLinkedin.value);
-    if(!url) return;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-  inLinkedin.addEventListener("input", () => {
-    btnOpen.disabled = !inLinkedin.value.trim();
-  });
+linkWrap.append(inLinkedin, btnOpen);
+row2.append(inCompany, linkWrap);
 
-  linkWrap.append(inLinkedin, btnOpen);
-  row2.append(inCompany, linkWrap);
+// Row 2.5: email + phone (NEW)
+const rowContact = document.createElement("div");
+rowContact.className = "ae-two";
 
-  // Photo controls: hidden data URL, file input, clear button
-  const inPhotoHidden = document.createElement("input");
-  inPhotoHidden.type = "hidden";
-  inPhotoHidden.name = "a_photo";
-  inPhotoHidden.value = a.photoUrl || "";
+const inEmail = document.createElement("input");
+inEmail.type = "email";
+inEmail.placeholder = "Email";
+inEmail.value = a.email || "";
+inEmail.name = "a_email";
 
-  const inPhotoFile = document.createElement("input");
-  inPhotoFile.type = "file";
-  inPhotoFile.accept = "image/*";
+const inPhone = document.createElement("input");
+inPhone.type = "tel";
+inPhone.placeholder = "Phone";
+inPhone.value = a.phone || "";
+inPhone.name = "a_phone";
 
-  const btnClearPhoto = document.createElement("button");
-  btnClearPhoto.className = "btn sm";
-  btnClearPhoto.type = "button";
-  btnClearPhoto.textContent = "🧹 Clear photo";
-  btnClearPhoto.style.marginLeft = "8px";
-  btnClearPhoto.onclick = () => {
-    a.photoUrl = "";
-    inPhotoHidden.value = "";
-    avatar.innerHTML = (inName.value || "?").slice(0,1).toUpperCase();
-  };
+rowContact.append(inEmail, inPhone);
 
-  inPhotoFile.addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const dataUrl = await fileToDataUrl(file, { maxW: 256, maxH: 256, quality: 0.9 });
-      a.photoUrl = dataUrl;
-      inPhotoHidden.value = dataUrl;
+// Photo controls: hidden data URL, file input, clear button
+const inPhotoHidden = document.createElement("input");
+inPhotoHidden.type = "hidden";
+inPhotoHidden.name = "a_photo";
+inPhotoHidden.value = a.photoUrl || "";
 
-      avatar.innerHTML = "";
-      const img2 = document.createElement("img");
-      img2.src = dataUrl;
-      avatar.append(img2);
-    } catch (err) {
-      console.error(err);
-      alert("Could not read that image. Try a PNG or JPG.");
-    } finally {
-      inPhotoFile.value = "";
-    }
-  });
+const inPhotoFile = document.createElement("input");
+inPhotoFile.type = "file";
+inPhotoFile.accept = "image/*";
 
-  // keep the initial letter live if there's no photo
-  inName.addEventListener("input", () => {
-    if (!inPhotoHidden.value){
-      avatar.textContent = (inName.value || "?").slice(0,1).toUpperCase();
-    }
-  });
+const btnClearPhoto = document.createElement("button");
+btnClearPhoto.className = "btn sm";
+btnClearPhoto.type = "button";
+btnClearPhoto.textContent = "🧹 Clear photo";
+btnClearPhoto.style.marginLeft = "8px";
+btnClearPhoto.onclick = () => {
+  a.photoUrl = "";
+  inPhotoHidden.value = "";
+  avatar.innerHTML = (inName.value || "?").slice(0,1).toUpperCase();
+};
 
-  const photoRow = document.createElement("div");
-  photoRow.className = "ae-two";
-  const photoLeft = document.createElement("div");
-  const photoRight = document.createElement("div");
-  photoLeft.append(inPhotoFile, btnClearPhoto);
-  photoRow.append(photoLeft, photoRight);
+inPhotoFile.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const dataUrl = await fileToDataUrl(file, { maxW: 256, maxH: 256, quality: 0.9 });
+    a.photoUrl = dataUrl;
+    inPhotoHidden.value = dataUrl;
 
-  // Notes
-  const inNotes = document.createElement("textarea");
-  inNotes.placeholder = "Notes";
-  inNotes.value = a.notes || "";
+    avatar.innerHTML = "";
+    const img2 = document.createElement("img");
+    img2.src = dataUrl;
+    avatar.append(img2);
+  } catch (err) {
+    console.error(err);
+    alert("Could not read that image. Try a PNG or JPG.");
+  } finally {
+    inPhotoFile.value = "";
+  }
+});
 
-  // Remove button
-  const actions = document.createElement("div");
-  actions.className = "ae-actions";
-  const btnRemove = document.createElement("button");
-  btnRemove.className = "btn sm";
-  btnRemove.textContent = "🗑️ Remove";
-  btnRemove.onclick = () => {
-    currentAttendees = currentAttendees.filter(x => x.id !== a.id);
-    renderAttendeeEditor(currentAttendees);
-  };
-  actions.append(btnRemove);
+// keep the initial letter live if there's no photo
+inName.addEventListener("input", () => {
+  if (!inPhotoHidden.value){
+    avatar.textContent = (inName.value || "?").slice(0,1).toUpperCase();
+  }
+});
 
-  // Assemble
-  right.append(row1, row2, photoRow, inPhotoHidden, inNotes);
-  grid.append(avatar, right);
-  wrap.append(grid, actions);
-  return wrap;
+const photoRow = document.createElement("div");
+photoRow.className = "ae-two";
+const photoLeft = document.createElement("div");
+const photoRight = document.createElement("div");
+photoLeft.append(inPhotoFile, btnClearPhoto);
+photoRow.append(photoLeft, photoRight);
+
+// Notes
+const inNotes = document.createElement("textarea");
+inNotes.placeholder = "Notes";
+inNotes.value = a.notes || "";
+
+// Remove button
+const actions = document.createElement("div");
+actions.className = "ae-actions";
+const btnRemove = document.createElement("button");
+btnRemove.className = "btn sm";
+btnRemove.textContent = "🗑️ Remove";
+btnRemove.onclick = () => {
+  currentAttendees = currentAttendees.filter(x => x.id !== a.id);
+  renderAttendeeEditor(currentAttendees);
+};
+actions.append(btnRemove);
+
+// Assemble (only once; include rowContact before photoRow)
+right.append(row1, row2, rowContact, photoRow, inPhotoHidden, inNotes);
+grid.append(avatar, right);
+wrap.append(grid, actions);
+return wrap;
 }
-
 function renderAttendeeEditor(list){
   attendeeEditorRoot.innerHTML = "";
   if (!list || list.length === 0){
@@ -1258,6 +1283,8 @@ function collectAttendeesFromEditor(){
     const inTitle    = row.querySelector('input[name="a_title"]');
     const inCompany  = row.querySelector('input[name="a_company"]');
     const inLinkedin = row.querySelector('input[name="a_linkedin"]');
+        const inEmail    = row.querySelector('input[name="a_email"]');   // NEW
+    const inPhone    = row.querySelector('input[name="a_phone"]');  
     const inPhoto    = row.querySelector('input[name="a_photo"]');
     const inNotes    = row.querySelector('textarea');
 
@@ -1269,6 +1296,8 @@ function collectAttendeesFromEditor(){
       linkedin: (inLinkedin?.value || "").trim(),
       photoUrl: (inPhoto?.value || "").trim(),   // data URL from the file upload
       notes: (inNotes?.value || "").trim(),
+        email: (inEmail?.value || "").trim(),    // ← NEW
+  phone: (inPhone?.value || "").trim()     // ← NEW
     };
   });
 }
@@ -1646,6 +1675,18 @@ function renderDetails(target = detailsCol, mode = "day"){
 
     rightT.textContent = `${dateLabel} • ${timePart}`;
     t.append(leftT, rightT);
+    if (mode === "all") {
+  const editHeadBtn = document.createElement("button");
+  editHeadBtn.className = "btn sm";
+  editHeadBtn.textContent = "✏️ Edit";
+  editHeadBtn.title = "Edit meeting";
+  editHeadBtn.onclick = (e) => {
+    e.stopPropagation();
+    openMeetingDialog(m);
+  };
+  // Put the edit button on the right side of the title row
+  t.append(editHeadBtn);
+}
     head.append(t);
 
 
@@ -1671,6 +1712,7 @@ if (where) {
     rightCol.append(ak);
     (m.attendees||[]).forEach(a => {
       const wrap = document.createElement("div"); wrap.className="attendee";
+    
       const row = document.createElement("div"); row.className="row";
       const who = document.createElement("div"); who.className="row"; who.style.gap="12px";
       const av = document.createElement("div"); av.className = "avatar";
@@ -1696,6 +1738,30 @@ if (where) {
       } else {
         wrap.append(row);
       }
+        // Contact chips (email / phone)
+const contact = document.createElement("div");
+contact.style.marginTop = "6px";
+contact.style.display = "flex";
+contact.style.gap = "8px";
+contact.style.flexWrap = "wrap";
+
+if (a.email) {
+  const emailLink = document.createElement("a");
+  emailLink.className = "chip";
+  emailLink.href = `mailto:${a.email}`;
+  emailLink.textContent = a.email;
+  contact.append(emailLink);
+}
+if (a.phone) {
+  const phoneLink = document.createElement("a");
+  phoneLink.className = "chip";
+  const tel = a.phone.replace(/[^\d+\-\s()]/g, "");
+  phoneLink.href = `tel:${tel}`;
+  phoneLink.textContent = a.phone;
+  contact.append(phoneLink);
+}
+
+if (contact.children.length) wrap.append(contact);
       rightCol.append(wrap);
     });
 
@@ -1720,7 +1786,7 @@ if (where) {
 
     inner.append(rightCol, leftCol);
     c.append(inner);
-+ card.append(head, c);
+card.append(head, c);
     target.append(card);
   });
 }
@@ -2251,11 +2317,9 @@ function renderAll(){
   // Right-column details (Schedule view)
   renderDetails();
 
-// Always pre-render the Meetings tab with the full detail cards (includes attendees)
-const ds = $("#detailsStandalone");
-if (ds) {
-  renderDetails(ds, "all");   // ✅ full cards + attendees for ALL upcoming
-}
+  // Meetings tab (all upcoming, with attendees)
+  const ds = $("#detailsStandalone");
+  if (ds) renderDetails(ds, "all");   // ← add this back
 
   renderTravel();
   renderLogo();
