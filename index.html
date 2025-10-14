@@ -527,17 +527,7 @@ header h1, header .muted { color:#fff; }
 
   const db = firebase.firestore();
   const COL = db.collection('tradeshow');
-const LS_KEY_GPT = "gptUrl";
-const getLocalGptUrl = () => {
-  openGptBtn.textContent = gptUrl ? "🔗 Open our GPT" : "🔗 Set GPT link";
-  try { return localStorage.getItem(LS_KEY_GPT) || ""; } catch { return ""; }
-};
-const setLocalGptUrl = (v) => {
-  try {
-    if (v) localStorage.setItem(LS_KEY_GPT, v);
-    else localStorage.removeItem(LS_KEY_GPT);
-  } catch {}
-};
+
   async function getSharedDoc(docId, fallback) {
     const snap = await COL.doc(docId).get();
     return snap.exists ? snap.data().value : fallback;
@@ -550,18 +540,6 @@ const setLocalGptUrl = (v) => {
   }
 </script>
 </head>
-  <dialog id="gptDialog">
-  <div class="dialog-c">
-    <h3 style="margin:0 0 8px 0">Set your GPT link</h3>
-    <div class="col gap12">
-      <input id="gptInput" placeholder="https://chat.openai.com/g/g-XXXXX-your-gpt"/>
-    </div>
-  </div>
-  <div class="dialog-actions">
-    <button class="btn" id="gptCancel">Cancel</button>
-    <button class="btn primary" id="gptSave">Save</button>
-  </div>
-</dialog>
 <body>
   <div class="container">
   <header>
@@ -726,6 +704,20 @@ const setLocalGptUrl = (v) => {
     <button class="btn primary" id="dlgSave">Save</button>
   </div>
 </dialog>
+
+
+  <dialog id="gptDialog">
+    <div class="dialog-c">
+      <h3 style="margin:0 0 8px 0">Set your GPT link</h3>
+      <div class="col gap12">
+        <input id="gptInput" placeholder="https://chat.openai.com/g/g-XXXXX-your-gpt"/>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" id="gptCancel">Cancel</button>
+      <button class="btn primary" id="gptSave">Save</button>
+    </div>
+  </dialog>
 
   <dialog id="travelDialog">
     <div class="dialog-c">
@@ -933,8 +925,7 @@ function upsertTravel(t){
 }
 function deleteTravel(id){ return TRAVEL.doc(id).delete(); }
     // state (will be replaced by Firestore values on load)
-let gptUrl = getLocalGptUrl() || "";
-    
+ let gptUrl   = "";
 let logoUrl = "";
     let meetings = [];
     
@@ -1327,46 +1318,53 @@ const gptSave    = document.getElementById("gptSave");
 const gptCancel  = document.getElementById("gptCancel");
 
 // keep local state updated if changed elsewhere
-onSharedDoc('gptUrl', v => { gptUrl = v || ""; 
-                              if (gptUrl) setLocalGptUrl(gptUrl); 
-  openGptBtn.textContent = gptUrl ? "🔗 Open our GPT" : "🔗 Set GPT link";
-});
-function openGptSetter() {
-  // If there's no saved URL, try to show the dialog; fall back to prompt() if unsupported
-  if (gptDialog && typeof gptDialog.showModal === 'function') {
-    gptInput.value = gptUrl || "";
-    gptDialog.showModal();
-  } else {
-    const v = prompt("Paste your GPT link (starts with http…)", gptUrl || "");
-    if (!v) return;
-    const url = /^https?:\/\//i.test(v) ? v.trim() : "https://" + v.trim();
-    setSharedDoc("gptUrl", url).then(() => { gptUrl = url; });
-  }
-}
+onSharedDoc('gptUrl', v => { gptUrl = v || ""; });
 
+// open personal GPT (or prompt to set it)
 openGptBtn.onclick = () => {
-  const url = gptUrl || getLocalGptUrl(); 
   if (gptUrl && /^https?:\/\//i.test(gptUrl)) {
     window.open(gptUrl, "_blank", "noopener,noreferrer");
   } else {
-    openGptSetter();
+    gptInput.value = gptUrl || "";
+    gptDialog.showModal();
   }
 };
 
-// Save button stays the same:
+// save from dialog
 gptSave.onclick = async () => {
   let url = (gptInput.value || "").trim();
   if (!url) { gptDialog.close(); return; }
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-  try { await setSharedDoc("gptUrl", url); gptUrl = url; }
-  catch (err) { alert("Could not save GPT link: " + (err.code || err.message || "unknown error")); }
-  finally  {
-      gptUrl = url;
-    setLocalGptUrl(url);                      // ← local fallback is the source of truth if needed
-    openGptBtn.textContent = "🔗 Open our GPT";
+  try {
+    await setSharedDoc("gptUrl", url);
+    gptUrl = url;
+  } catch (err) {
+    alert("Could not save GPT link: " + (err.code || err.message || "unknown error"));
+  } finally {
     gptDialog.close();
   }
 };
+gptCancel.onclick = () => gptDialog.close();
+function daysFromCalendar(){
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
+  });
+  const byDay = new Map();
+
+  // include meetings that have a date (dateTBD=false) + all sessions
+  [...meetings.filter(m => !m.dateTBD), ...sessions].forEach(x => {
+    const k = fmt.format(new Date(x.startISO));
+    const cur = byDay.get(k);
+    if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(k, x.startISO);
+  });
+
+  // ensure the anchor day appears if we have any Date TBD meetings
+  if (meetings.some(m => m.dateTBD) && !byDay.has(TBD_ANCHOR_YMD)) {
+    byDay.set(TBD_ANCHOR_YMD, new Date('2025-09-02T12:00:00Z').toISOString());
+  }
+
+  return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b));
+}
  function shiftDay(dir){
    const days = daysFromCalendar();
   const idx = days.findIndex(d => sameDay(d, activeDate)); // both ISO strings
@@ -2361,6 +2359,7 @@ TRAVEL.orderBy('startISO').onSnapshot(snap => {
 
   renderAll(); // first paint
       switchTopTab(activeTopTab); 
+})();
 })();
   </script>
 </body>
