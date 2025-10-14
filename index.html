@@ -540,6 +540,18 @@ header h1, header .muted { color:#fff; }
   }
 </script>
 </head>
+  <dialog id="gptDialog">
+  <div class="dialog-c">
+    <h3 style="margin:0 0 8px 0">Set your GPT link</h3>
+    <div class="col gap12">
+      <input id="gptInput" placeholder="https://chat.openai.com/g/g-XXXXX-your-gpt"/>
+    </div>
+  </div>
+  <div class="dialog-actions">
+    <button class="btn" id="gptCancel">Cancel</button>
+    <button class="btn primary" id="gptSave">Save</button>
+  </div>
+</dialog>
 <body>
   <div class="container">
   <header>
@@ -704,20 +716,6 @@ header h1, header .muted { color:#fff; }
     <button class="btn primary" id="dlgSave">Save</button>
   </div>
 </dialog>
-
-
-  <dialog id="gptDialog">
-    <div class="dialog-c">
-      <h3 style="margin:0 0 8px 0">Set your GPT link</h3>
-      <div class="col gap12">
-        <input id="gptInput" placeholder="https://chat.openai.com/g/g-XXXXX-your-gpt"/>
-      </div>
-    </div>
-    <div class="dialog-actions">
-      <button class="btn" id="gptCancel">Cancel</button>
-      <button class="btn primary" id="gptSave">Save</button>
-    </div>
-  </dialog>
 
   <dialog id="travelDialog">
     <div class="dialog-c">
