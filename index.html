@@ -1320,51 +1320,36 @@ const gptCancel  = document.getElementById("gptCancel");
 // keep local state updated if changed elsewhere
 onSharedDoc('gptUrl', v => { gptUrl = v || ""; });
 
-// open personal GPT (or prompt to set it)
+function openGptSetter() {
+  // If there's no saved URL, try to show the dialog; fall back to prompt() if unsupported
+  if (gptDialog && typeof gptDialog.showModal === 'function') {
+    gptInput.value = gptUrl || "";
+    gptDialog.showModal();
+  } else {
+    const v = prompt("Paste your GPT link (starts with http…)", gptUrl || "");
+    if (!v) return;
+    const url = /^https?:\/\//i.test(v) ? v.trim() : "https://" + v.trim();
+    setSharedDoc("gptUrl", url).then(() => { gptUrl = url; });
+  }
+}
+
 openGptBtn.onclick = () => {
   if (gptUrl && /^https?:\/\//i.test(gptUrl)) {
     window.open(gptUrl, "_blank", "noopener,noreferrer");
   } else {
-    gptInput.value = gptUrl || "";
-    gptDialog.showModal();
+    openGptSetter();
   }
 };
 
-// save from dialog
+// Save button stays the same:
 gptSave.onclick = async () => {
   let url = (gptInput.value || "").trim();
   if (!url) { gptDialog.close(); return; }
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-  try {
-    await setSharedDoc("gptUrl", url);
-    gptUrl = url;
-  } catch (err) {
-    alert("Could not save GPT link: " + (err.code || err.message || "unknown error"));
-  } finally {
-    gptDialog.close();
-  }
+  try { await setSharedDoc("gptUrl", url); gptUrl = url; }
+  catch (err) { alert("Could not save GPT link: " + (err.code || err.message || "unknown error")); }
+  finally { gptDialog.close(); }
 };
-gptCancel.onclick = () => gptDialog.close();
-function daysFromCalendar(){
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
-  });
-  const byDay = new Map();
-
-  // include meetings that have a date (dateTBD=false) + all sessions
-  [...meetings.filter(m => !m.dateTBD), ...sessions].forEach(x => {
-    const k = fmt.format(new Date(x.startISO));
-    const cur = byDay.get(k);
-    if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(k, x.startISO);
-  });
-
-  // ensure the anchor day appears if we have any Date TBD meetings
-  if (meetings.some(m => m.dateTBD) && !byDay.has(TBD_ANCHOR_YMD)) {
-    byDay.set(TBD_ANCHOR_YMD, new Date('2025-09-02T12:00:00Z').toISOString());
-  }
-
-  return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b));
-}
  function shiftDay(dir){
    const days = daysFromCalendar();
   const idx = days.findIndex(d => sameDay(d, activeDate)); // both ISO strings
