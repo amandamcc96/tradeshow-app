@@ -887,7 +887,7 @@ function nowInTZISO(){
     hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
   }).formatToParts(new Date()).reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
   // YYYY-MM-DDTHH:mm:ss in TZ; treat as local wall-clock reference
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}:00`;
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 // Choose the "most current" calendar day bucket:
@@ -928,7 +928,7 @@ function deleteTravel(id){ return TRAVEL.doc(id).delete(); }
  let gptUrl   = "";
 let logoUrl = "";
     let meetings = [];
-    
+  let sessions = [];   
 let travel   = [];
     let activeDate = new Date().toISOString();
     let view = "agenda";
@@ -1387,7 +1387,7 @@ function upsertSession(s){
 function deleteSession(id){ return SESSIONS.doc(id).delete(); }
 
 // State
-let sessions = [];
+
     let autoPickedDayOnce = false; 
 SESSIONS.orderBy('startISO').onSnapshot(async snap => {
   sessions = snap.docs.map(d => d.data());
