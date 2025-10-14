@@ -1318,7 +1318,7 @@ const gptSave    = document.getElementById("gptSave");
 const gptCancel  = document.getElementById("gptCancel");
 
 // keep local state updated if changed elsewhere
-onSharedDoc('gptUrl', v => { gptUrl = v || ""; });
+onSharedDoc('gptUrl', v => { gptUrl = v || ""; 
   openGptBtn.textContent = gptUrl ? "🔗 Open our GPT" : "🔗 Set GPT link";
 });
 function openGptSetter() {
