@@ -1319,7 +1319,8 @@ const gptCancel  = document.getElementById("gptCancel");
 
 // keep local state updated if changed elsewhere
 onSharedDoc('gptUrl', v => { gptUrl = v || ""; });
-
+  openGptBtn.textContent = gptUrl ? "🔗 Open our GPT" : "🔗 Set GPT link";
+});
 function openGptSetter() {
   // If there's no saved URL, try to show the dialog; fall back to prompt() if unsupported
   if (gptDialog && typeof gptDialog.showModal === 'function') {
