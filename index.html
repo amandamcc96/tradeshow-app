@@ -649,7 +649,8 @@ header h1, header .muted { color:#fff; }
         
       <!-- Right -->
       <div class="col gap16" id="detailsCol"></div>
-      
+       </div> <!-- end .grid -->
+</section>
 
   <!-- Dialogs -->
   <dialog id="logoDialog">
@@ -920,7 +921,7 @@ header h1, header .muted { color:#fff; }
 
   const TOP_TABS = ["schedule", "travel", "gpt", "meetings"];
   let activeTopTab = localStorage.getItem("activeTopTab") || "gpt";
-
+if (activeTopTab === 'travel') activeTopTab = 'gpt';
   // ========= Elements =========
   const activeDateLbl = $("#activeDateLbl");
   const prevDayBtn = $("#prevDay");
@@ -976,13 +977,12 @@ header h1, header .muted { color:#fff; }
   // Logo + personal GPT
 const brandLogo   = $("#brandLogo");
 const setLogoBtn  = $("#setLogoBtn");                 // ← add back
-const setLogoUrlBtn = $("#setLogoUrlBtn"); 
+
   const logoDialog = $("#logoDialog");
   const logoInput  = $("#logoInput");
   const logoSave   = $("#logoSave");
   const logoCancel = $("#logoCancel");
   const logoFile   = $("#logoFile");
-  if (setLogoUrlBtn) setLogoUrlBtn.onclick = () => logoDialog.showModal();
   const openGptBtn = $("#openGptBtn");
   const gptDialog  = $("#gptDialog");
   const gptInput   = $("#gptInput");
@@ -1823,44 +1823,7 @@ function renderImportExport() {
   }
 
   // ========= Wiring =========
-  // day + view
-  prevDayBtn.onclick = () => shiftDay(-1);
-  nextDayBtn.onclick = () => shiftDay(1);
-  tabAgenda.onclick  = () => { view = "agenda"; renderAll(); };
-  tabHourly.onclick  = () => { view = "hourly"; renderAll(); };
-  addMeetingBtn.onclick = () => openMeetingDialog();
 
-  // meeting dialog
-  dlgSave.onclick   = () => saveMeetingFromDialog();
-  dlgCancel.onclick = () => meetingDialog.close();
-  m_dateTBD.onchange = updateTbdUI;
-  m_timeTBD.onchange = updateTbdUI;
-
-  // travel dialog
-  t_type.onchange = updateTravelDateInputs;
-  t_save.onclick  = () => saveTravelFromDialog();
-  t_cancel.onclick= () => travelDialog.close();
-
-  // top tabs
-  $$("#topTabs .tab").forEach(btn => btn.onclick = () => switchTopTab(btn.dataset.toptab));
-const mtabAddMeeting = document.getElementById("mtabAddMeeting");
-mtabAddMeeting?.addEventListener("click", () => openMeetingDialog());
-  // travel collapse
-  const initialTravelCollapsed = localStorage.getItem("travelCollapsed") === "1";
-  setTravelCollapsed(initialTravelCollapsed, false);
-  travelCollapseBtn.onclick = () => setTravelCollapsed(!travelSection.classList.contains("hidden"));
-
-  // logo + personal gpt
- 
-  logoCancel.onclick = () => logoDialog.close();
-  logoSave.onclick = async () => {
-    let url = (logoInput.value || "").trim();
-    if (!url) { logoDialog.close(); return; }
-    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-    try { await setSharedDoc('logoUrl', url); logoUrl = url; renderLogo(); }
-    catch (err) { alert("Could not save logo: " + (err.code || err.message || "unknown error")); }
-    finally { logoDialog.close(); }
-  };
 
   logoFile?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -1878,6 +1841,47 @@ mtabAddMeeting?.addEventListener("click", () => openMeetingDialog());
       e.target.value = '';
     }
   });
+document.addEventListener('click', async (e) => {
+  // top tabs
+  const tabBtn = e.target.closest('#topTabs .tab');
+  if (tabBtn && tabBtn.dataset.toptab) {
+    switchTopTab(tabBtn.dataset.toptab);
+    return;
+  }
+
+  // date nav
+  if (e.target.closest('#prevDay')) { shiftDay(-1); return; }
+  if (e.target.closest('#nextDay')) { shiftDay(1);  return; }
+
+  // agenda/hourly toggle
+  if (e.target.closest('#tabAgenda')) { view = 'agenda'; renderAll(); return; }
+  if (e.target.closest('#tabHourly')) { view = 'hourly'; renderAll(); return; }
+
+  // meeting add (both places)
+  if (e.target.closest('#addMeetingBtn')) { openMeetingDialog(); return; }
+  if (e.target.closest('#mtabAddMeeting')) { openMeetingDialog(); return; }
+
+  // travel collapse
+  if (e.target.closest('#travelCollapseBtn')) {
+    setTravelCollapsed(!travelSection.classList.contains('hidden'));
+    return;
+  }
+
+  // logo dialog open
+  if (e.target.closest('#setLogoUrlBtn')) { logoDialog.showModal(); return; }
+
+  // logo dialog actions
+  if (e.target.closest('#logoCancel')) { logoDialog.close(); return; }
+
+  if (e.target.closest('#logoSave')) {
+    let url = (logoInput.value || '').trim();
+    if (!url) { logoDialog.close(); return; }
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try { await setSharedDoc('logoUrl', url); logoUrl = url; renderLogo(); }
+    catch (err) { alert('Could not save logo: ' + (err.code || err.message || 'unknown error')); }
+    finally { logoDialog.close(); }
+    return;
+});
 
   onSharedDoc('logoUrl', v => { logoUrl = v || ""; renderLogo(); });
 
@@ -1935,39 +1939,46 @@ mtabAddMeeting?.addEventListener("click", () => openMeetingDialog());
   });
 
   // ========= Live subscriptions + init =========
-  async function init() {
-    try {
-      gptUrl  = (await getSharedDoc('gptUrl', "")) || "";
-      logoUrl = (await getSharedDoc('logoUrl', "")) || "";
-    } catch { /* optional */ }
-    renderLogo();
-
-    MEETINGS.orderBy('startISO').onSnapshot(snap => {
-      meetings = snap.docs.map(d => d.data());
-      const mDays = daysFromCalendar();
-      if (mDays.length && (!mDays.some(d => sameDay(d, activeDate)) || !autoPickedDayOnce)) {
-        const best = pickMostCurrentDay(mDays);
-        if (best) { activeDate = best; autoPickedDayOnce = true; }
-      }
-      renderAll();
-      switchTopTab(activeTopTab);
-    });
-
-    TRAVEL.orderBy('startISO').onSnapshot(snap => { travel = snap.docs.map(d => d.data()); renderTravel(); });
-
-    SESSIONS.orderBy('startISO').onSnapshot(snap => {
-      sessions = snap.docs.map(d => d.data());
-      const sDays = daysFromCalendar();
-      if (sDays.length && (!sDays.some(d => sameDay(d, activeDate)) || !autoPickedDayOnce)) {
-        const best = pickMostCurrentDay(sDays);
-        if (best) { activeDate = best; autoPickedDayOnce = true; }
-      }
-      renderAll();
-    });
-
-    renderAll();
-    switchTopTab(activeTopTab);
+async function init() {
+  try {
+    gptUrl  = (await getSharedDoc('gptUrl', "")) || "";
+    logoUrl = (await getSharedDoc('logoUrl', "")) || "";
+  } catch (err) {
+    console.warn('Shared docs not available yet:', err);
   }
+  renderLogo();
+
+ try {
+  MEETINGS.orderBy('startISO').onSnapshot(snap => {
+    meetings = snap.docs.map(d => d.data());
+    if (!autoPickedDayOnce) {
+      const days = daysFromCalendar();
+      const pick = pickMostCurrentDay(days);
+      if (pick) activeDate = pick;
+      autoPickedDayOnce = true;
+    }
+    renderAll();
+  });
+
+  TRAVEL.orderBy('startISO').onSnapshot(snap => {
+    travel = snap.docs.map(d => d.data());
+    renderAll();
+  });
+
+  SESSIONS.orderBy('startISO').onSnapshot(snap => {
+    sessions = snap.docs.map(d => d.data());
+    renderAll();
+  });
+} catch (err) {
+  console.warn('Firestore wiring failed; running in local-only mode:', err);
+}
+
+
+  // Always render and enable tabs regardless of Firebase status
+  renderAll();
+  switchTopTab(activeTopTab || 'schedule');
+}  
+
 
   // kick off
   init();
