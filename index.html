@@ -1882,7 +1882,26 @@ document.addEventListener('click', async (e) => {
     finally { logoDialog.close(); }
     return;
 });
+// Meeting dialog buttons
+dlgSave.onclick   = saveMeetingFromDialog;
+dlgCancel.onclick = () => meetingDialog.close();
 
+// Travel dialog buttons
+t_save.onclick   = saveTravelFromDialog;
+t_cancel.onclick = () => travelDialog.close();
+
+// Meeting TBD toggles
+m_dateTBD.addEventListener('change', updateTbdUI);
+m_timeTBD.addEventListener('change', updateTbdUI);
+
+// Travel type (hotel vs flight/ground) toggle
+t_type.addEventListener('change', updateTravelDateInputs);
+
+// Add attendee
+addAttendeeBtn.onclick = () => {
+  currentAttendees = [...currentAttendees, blankAttendee()];
+  renderAttendeeEditor(currentAttendees);
+};
   onSharedDoc('logoUrl', v => { logoUrl = v || ""; renderLogo(); });
 
   // GPT link
