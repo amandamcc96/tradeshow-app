@@ -977,7 +977,7 @@ if (activeTopTab === 'travel') activeTopTab = 'gpt';
   // Logo + personal GPT
 const brandLogo   = $("#brandLogo");
 const setLogoBtn  = $("#setLogoBtn");                 // ← add back
-
+const setLogoUrlBtn = $("#setLogoUrlBtn"); 
   const logoDialog = $("#logoDialog");
   const logoInput  = $("#logoInput");
   const logoSave   = $("#logoSave");
@@ -1026,7 +1026,28 @@ const setLogoBtn  = $("#setLogoBtn");                 // ← add back
       reader.readAsDataURL(file);
     });
   }
+prevDayBtn?.addEventListener('click', () => shiftDay(-1));
+nextDayBtn?.addEventListener('click', () => shiftDay(1));
 
+tabAgenda?.addEventListener('click', () => { view = 'agenda'; renderAll(); });
+tabHourly?.addEventListener('click', () => { view = 'hourly'; renderAll(); });
+
+addMeetingBtn?.addEventListener('click', () => openMeetingDialog());
+document.getElementById('mtabAddMeeting')?.addEventListener('click', () => openMeetingDialog());
+
+logoCancel?.addEventListener('click', () => logoDialog.close());
+
+logoSave?.addEventListener('click', async () => {
+  let url = (logoInput.value || '').trim();
+  if (!url) { logoDialog.close(); return; }
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  try { await setSharedDoc('logoUrl', url); logoUrl = url; renderLogo(); }
+  catch (err) { alert('Could not save logo: ' + (err.code || err.message || 'unknown error')); }
+  finally { logoDialog.close(); }
+});
+travelCollapseBtn?.addEventListener('click', () => {
+  setTravelCollapsed(!travelSection.classList.contains('hidden'));
+});
   function setTravelCollapsed(collapsed, persist = true) {
     travelSection.classList.toggle("hidden", collapsed);
     travelCollapseBtn.setAttribute("aria-expanded", String(!collapsed));
@@ -1824,7 +1845,11 @@ function renderImportExport() {
 
   // ========= Wiring =========
 
-
+// Open the "Set logo URL" dialog
+setLogoUrlBtn?.addEventListener('click', () => {
+  logoInput.value = logoUrl || '';   // preload current value if any
+  logoDialog.showModal();
+});
   logoFile?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1841,47 +1866,16 @@ function renderImportExport() {
       e.target.value = '';
     }
   });
-document.addEventListener('click', async (e) => {
-  // top tabs
-  const tabBtn = e.target.closest('#topTabs .tab');
-  if (tabBtn && tabBtn.dataset.toptab) {
-    switchTopTab(tabBtn.dataset.toptab);
-    return;
-  }
-
-  // date nav
-  if (e.target.closest('#prevDay')) { shiftDay(-1); return; }
-  if (e.target.closest('#nextDay')) { shiftDay(1);  return; }
-
-  // agenda/hourly toggle
-  if (e.target.closest('#tabAgenda')) { view = 'agenda'; renderAll(); return; }
-  if (e.target.closest('#tabHourly')) { view = 'hourly'; renderAll(); return; }
-
-  // meeting add (both places)
-  if (e.target.closest('#addMeetingBtn')) { openMeetingDialog(); return; }
-  if (e.target.closest('#mtabAddMeeting')) { openMeetingDialog(); return; }
-
-  // travel collapse
-  if (e.target.closest('#travelCollapseBtn')) {
-    setTravelCollapsed(!travelSection.classList.contains('hidden'));
-    return;
-  }
-
-  // logo dialog open
-  if (e.target.closest('#setLogoUrlBtn')) { logoDialog.showModal(); return; }
-
-  // logo dialog actions
-  if (e.target.closest('#logoCancel')) { logoDialog.close(); return; }
-
-  if (e.target.closest('#logoSave')) {
-    let url = (logoInput.value || '').trim();
-    if (!url) { logoDialog.close(); return; }
-    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-    try { await setSharedDoc('logoUrl', url); logoUrl = url; renderLogo(); }
-    catch (err) { alert('Could not save logo: ' + (err.code || err.message || 'unknown error')); }
-    finally { logoDialog.close(); }
-    return;
+// Tabs: use container-level delegation (more reliable than document-level here)
+const topTabsEl = document.getElementById('topTabs');
+topTabsEl?.addEventListener('click', (e) => {
+  const btn = e.target.closest('button.tab');
+  if (!btn || !btn.dataset.toptab) return;
+  e.preventDefault();
+  e.stopPropagation();
+  switchTopTab(btn.dataset.toptab);
 });
+
 // Meeting dialog buttons
 dlgSave.onclick   = saveMeetingFromDialog;
 dlgCancel.onclick = () => meetingDialog.close();
