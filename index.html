@@ -507,6 +507,7 @@ header h1, header .muted { color:#fff; }
   padding: 4px 8px;
   font-size: 12px;
 }
+
   </style>
 
   <!-- Firebase compat SDKs (no build step) -->
@@ -555,6 +556,7 @@ header h1, header .muted { color:#fff; }
       <!-- Logo replaces the emoji -->
       <img id="brandLogo" class="brand-logo hidden" alt="Company logo" />
       <label for="logoFile" id="setLogoBtn" class="btn sm">🖼️ Set logo</label>
+      <button class="btn sm" id="setLogoUrlBtn" type="button">🔗 Set logo URL</button>
 <input id="logoFile" type="file" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;" />
   Your Dreamforce 2025 Assistant
   <span class="muted" style="font-weight:400"></span>
@@ -753,1613 +755,1223 @@ header h1, header .muted { color:#fff; }
     </div>
   </dialog>
 
-  <script>
-  (function(){
-    const $ = (sel, root=document) => root.querySelector(sel);
-    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+ <script>
+(function () {
+  // ========= Utilities =========
+  const $  = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const uid = () => Math.random().toString(36).slice(2, 9);
 
-    const uid = () => Math.random().toString(36).slice(2,9);
-   const TZ = 'America/Los_Angeles';
+  // NOTE: App timezone is PT; change as needed
+  const TZ = 'America/Los_Angeles';
+  const TBD_ANCHOR_YMD = '2025-09-02'; // day that hosts Date-TBD group
 
-   const fmtTime = (iso) =>
-  new Date(iso).toLocaleTimeString([], {
-    hour: "2-digit", minute: "2-digit", timeZone: TZ,
-        hour12: true  
-  });
+  const fmtTime = (iso) =>
+    new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: TZ, hour12: true });
 
-const fmtDate = (iso) =>
-  new Date(iso).toLocaleDateString([], {
-    year: "numeric", month: "short", day: "2-digit", timeZone: TZ
-  });
-  const hoursBetween = (startISO, endISO) =>
-  (new Date(endISO).getTime() - new Date(startISO).getTime()) / (1000 * 60 * 60);
-    const ptMinutes = (iso) => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ, hour:'2-digit', minute:'2-digit', hour12:false
-  }).formatToParts(new Date(iso));
-  const h = +parts.find(p=>p.type==='hour').value;
-  const m = +parts.find(p=>p.type==='minute').value;
-  return h*60 + m;
-};
-   const sameDay = (aISO, bISO) => {
-  const parts = iso => new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
-  }).formatToParts(new Date(iso))
-    .reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
-  const A = parts(aISO), B = parts(bISO);
-  return A.year===B.year && A.month===B.month && A.day===B.day;
-};
-    const TBD_ANCHOR_YMD = '2025-09-02'; // change if you want a different date (PT)
+  const fmtDate = (iso) =>
+    new Date(iso).toLocaleDateString([], { year: "numeric", month: "short", day: "2-digit", timeZone: TZ });
 
-function ymdInTZ(iso){
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
-  }).formatToParts(new Date(iso))
-    .reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-    function isSameOrAfterTodayInTZ(iso){
-  const todayYmd = ymdInTZ(new Date().toISOString());
-  const ymd = ymdInTZ(iso);
-  return ymd >= todayYmd;  // compares YYYY-MM-DD strings in the app TZ
-}
-function isAnchorDay(iso){
-  return ymdInTZ(iso) === TBD_ANCHOR_YMD;
-}
-function displayLocation(it){
-  if (!it || typeof it !== 'object') return '';
-  const keys = [
-    'location','Location',
-    'stage','Stage',
-    'stageName','stage_name','StageName',
-    'venue','Venue',
-    'room','Room',
-    'place','Place',
-    'where','Where',
-    'locationNote','location_name','LocationName','LocationNote',
-    'space','Space','area','Area'
-  ];
-  const pickString = (v) => {
-    if (typeof v === 'string') return v.trim();
-    if (Array.isArray(v)) {
-      return v.map(x => (typeof x === 'string' ? x.trim()
-                 : x && typeof x === 'object' ? (x.name || x.label || '').trim()
-                 : ''))
-              .filter(Boolean).join(' • ');
+  const ptMinutes = (iso) => {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false })
+      .formatToParts(new Date(iso));
+    const h = +parts.find(p => p.type === 'hour').value;
+    const m = +parts.find(p => p.type === 'minute').value;
+    return h * 60 + m;
+  };
+
+  const ymdPartsInTZ = (iso) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+      .formatToParts(new Date(iso))
+      .reduce((o, p) => (p.type !== 'literal' && (o[p.type] = p.value), o), {});
+
+  const ymdInTZ = (iso) => {
+    const parts = ymdPartsInTZ(iso);
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  };
+
+  const sameDay = (aISO, bISO) => {
+    const A = ymdPartsInTZ(aISO), B = ymdPartsInTZ(bISO);
+    return A.year === B.year && A.month === B.month && A.day === B.day;
+  };
+
+  const isSameOrAfterTodayInTZ = (iso) => ymdInTZ(iso) >= ymdInTZ(new Date().toISOString());
+  const isAnchorDay = (iso) => ymdInTZ(iso) === TBD_ANCHOR_YMD;
+
+  const escapeHtml = (s) =>
+    (s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+
+  const parseBullets = (text) => {
+    if (!text) return [];
+    return text
+      .split(/\r?\n/)
+      .map(s => s.replace(/^\s*([•*-])\s+/, '').trim())
+      .filter(Boolean);
+  };
+
+  const renderNotes = (text) => {
+    const items = parseBullets(text);
+    if (items.length >= 2 || /^(\s*[•*-]\s+)/.test(text || "")) {
+      const ul = document.createElement('ul');
+      ul.style.margin = '0';
+      ul.style.paddingLeft = '18px';
+      items.forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        ul.append(li);
+      });
+      return ul;
+    } else {
+      const p = document.createElement('p');
+      p.textContent = (text || '').trim();
+      return p;
     }
-    if (v && typeof v === 'object') return (v.name || v.label || v.location || '').toString().trim();
+  };
+
+  const displayLocation = (it) => {
+    if (!it || typeof it !== 'object') return '';
+    const keys = [
+      'location','Location',
+      'stage','Stage',
+      'stageName','stage_name','StageName',
+      'venue','Venue',
+      'room','Room',
+      'place','Place',
+      'where','Where',
+      'locationNote','location_name','LocationName','LocationNote',
+      'space','Space','area','Area'
+    ];
+    const pickString = (v) => {
+      if (typeof v === 'string') return v.trim();
+      if (Array.isArray(v)) {
+        return v.map(x => (typeof x === 'string' ? x.trim()
+          : x && typeof x === 'object' ? (x.name || x.label || '').trim()
+          : ''))
+          .filter(Boolean).join(' • ');
+      }
+      if (v && typeof v === 'object') return (v.name || v.label || v.location || '').toString().trim();
+      return '';
+    };
+    for (const k of keys) {
+      if (k in it) {
+        const s = pickString(it[k]);
+        if (s) return s;
+      }
+    }
     return '';
   };
-  for (const k of keys){
-    if (k in it){
-      const s = pickString(it[k]);
-      if (s) return s;
-    }
-  }
-  return ''; // <-- no booth fallback
-}
-// (Optional) simple HTML escape since we'll inject into pill HTML
 
-
-// Basic HTML escape for pill text
-function escapeHtml(s){
-  return (s||'').replace(/[&<>"']/g, m => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[m]));
-}
-    function parseBullets(text){
-  if (!text) return [];
-  return text
-    .split(/\r?\n/)
-    .map(s => s.replace(/^\s*([•*-])\s+/, '').trim()) // strip leading bullet markers
-    .filter(Boolean);
-}
-
-function renderNotes(text){
-  const items = parseBullets(text);
-  if (items.length >= 2 || /^(\s*[•*-]\s+)/.test(text)) {
-    const ul = document.createElement('ul');
-    ul.style.margin = '0';
-    ul.style.paddingLeft = '18px';
-    items.forEach(t => {
-      const li = document.createElement('li');
-      li.textContent = t;
-      ul.append(li);
-    });
-    return ul;
-  } else {
-    const p = document.createElement('p');
-    p.textContent = (text||'').trim();
-    return p;
-  }
-}
-   function focusMeetingInDetails(id){
-  const el = document.getElementById(`detail-${id}`);
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
-  el.classList.add("pulse");
-  setTimeout(() => el.classList.remove("pulse"), 1200);
-}
-    // "now" in your app TZ
-function nowInTZISO(){
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit',
-    hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
-  }).formatToParts(new Date()).reduce((o,p)=> (p.type!=='literal' && (o[p.type]=p.value), o), {});
-  // YYYY-MM-DDTHH:mm:ss in TZ; treat as local wall-clock reference
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
-}
-
-// Choose the "most current" calendar day bucket:
-// - first day >= now (in TZ), else the last day available
-function pickMostCurrentDay(days){ // days = ISO start-of-item values from daysFromCalendar()
-  if (!days || !days.length) return null;
-  const now = new Date(); // wall clock; days already represent real dates in TZ
-  // find first day that is today-or-future in TZ
-  for (const d of days){
-    // compare by YMD in TZ
-    const dY = ymdInTZ(d);
-    const nowY = ymdInTZ(now.toISOString());
-    if (dY >= nowY) return d;
-  }
-  return days[days.length - 1];
-}
-   // seed
-    const seedDate = (()=>{
-      const now = new Date();
-      return new Date(now.getFullYear(), 8, 16, 9, 0, 0);
-    })();
-
-const MEETINGS = COL.doc('meetings').collection('items');
-const TRAVEL   = COL.doc('travel').collection('items');
-
-function upsertMeeting(m){
-  const id = m.id || uid();
-  return MEETINGS.doc(id).set({ ...m, id }, { merge: true });
-}
-function deleteMeeting(id){ return MEETINGS.doc(id).delete(); }
-
-function upsertTravel(t){
-  const id = t.id || uid();
-  return TRAVEL.doc(id).set({ ...t, id }, { merge: true });
-}
-function deleteTravel(id){ return TRAVEL.doc(id).delete(); }
-    // state (will be replaced by Firestore values on load)
- let gptUrl   = "";
-let logoUrl = "";
-    let meetings = [];
-  let sessions = [];   
-let travel   = [];
-    let activeDate = new Date().toISOString();
-    let view = "agenda";
-
-    // elements
-    const activeDateLbl = $("#activeDateLbl");
-    const prevDayBtn = $("#prevDay");
-    const nextDayBtn = $("#nextDay");
-    const tabAgenda = $("#tabAgenda");
-    const tabHourly = $("#tabHourly");
-    const agendaList = $("#agendaList");
-    const hourlyGrid = $("#hourlyGrid");
-    const addMeetingBtn = $("#addMeetingBtn");
-    const detailsCol = $("#detailsCol");
-  
-    const travelSection = $("#travelSection");
-    const t_rowDateTime = $("#t_rowDateTime");
-const t_rowDateOnly = $("#t_rowDateOnly");
-const t_startDate   = $("#t_startDate");
-const t_endDate     = $("#t_endDate");
-    function updateTravelDateInputs(){
-  const isHotel = (t_type.value === "hotel");
-  t_rowDateTime.classList.toggle("hidden", isHotel);
-  t_rowDateOnly.classList.toggle("hidden", !isHotel);
-}
-    const mtabAddMeeting = document.getElementById("mtabAddMeeting");
-mtabAddMeeting?.addEventListener("click", () => openMeetingDialog());
-const travelCollapseBtn = $("#travelCollapseBtn");
-const TOP_TABS = ["schedule","gpt","meetings"];
-let activeTopTab = localStorage.getItem("activeTopTab") || "gpt";
-// --- Assistant chat (front-end) ---
-const chatWindow = document.getElementById("chatWindow");
-const chatForm   = document.getElementById("chatForm");
-const chatInput  = document.getElementById("chatInput");
-const chatSend   = document.getElementById("chatSend");
-
-function appendMsg(role, text){
-  const row = document.createElement("div");
-  row.className = `msg ${role}`;
-  row.innerHTML = `<div class="who">${role === "user" ? "You" : "Assistant"}</div>
-                   <div class="bubble">${escapeHtml(text).replace(/\n/g,'<br>')}</div>`;
-  chatWindow.appendChild(row);
-  chatWindow.scrollTop = chatWindow.scrollHeight;
-}
-
-chatForm?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const content = chatInput.value.trim();
-  if (!content) return;
-
-  appendMsg("user", content);
-  chatInput.value = "";
-  chatInput.disabled = true; chatSend.disabled = true;
-
-  // Optional: pass lightweight context so the bot can answer “what’s next?” etc.
-  const ctx = {
-    date: fmtDate(activeDate),
-    meetings: itemsForDay(activeDate).filter(x => x.kind==="meeting").map(m => ({
-      title: m.title,
-      start: m.timeTBD ? "TBD" : fmtTime(m.startISO),
-      end:   m.timeTBD ? "TBD" : fmtTime(m.endISO),
-      location: displayLocation(m) || "",
-      booth: m.booth || ""
-    })),
-    travel: travel.map(t => ({
-      type: t.type, label: t.label,
-      start: t.startISO || "", end: t.endISO || ""
-    }))
+  const nowInTZISO = () => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    }).formatToParts(new Date())
+      .reduce((o, p) => (p.type !== 'literal' && (o[p.type] = p.value), o), {});
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
   };
 
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: content, context: ctx })
-    });
-    if (!res.ok) throw new Error("Request failed");
-    const data = await res.json(); // { reply: "..." }
-    appendMsg("assistant", data.reply || "(no reply)");
-  } catch (err){
-    console.error(err);
-    appendMsg("assistant", "Sorry, I couldn’t reach the assistant.");
-  } finally {
-    chatInput.disabled = false; chatSend.disabled = false; chatInput.focus();
-  }
-});
-function switchTopTab(name){
-  if(!TOP_TABS.includes(name)) name = "schedule";
-  activeTopTab = name;
-  localStorage.setItem("activeTopTab", name);
-const meetingsDescEl = document.querySelector('#view-meetings .card-h .desc');
-if (meetingsDescEl) {
-  meetingsDescEl.textContent =
-    (name === "meetings")
-      ? "All upcoming meetings (includes Date-TBD)."
-      : "All meeting cards for the active day.";
-}
-  // sections
-  $("#view-schedule").classList.toggle("hidden", name!=="schedule");
-  $("#view-travel").classList.toggle("hidden",   name!=="travel");
-  $("#view-gpt").classList.toggle("hidden",      name!=="gpt");
-  $("#view-meetings").classList.toggle("hidden", name!=="meetings");
-  // buttons
-  $$("#topTabs .tab").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.toptab === name);
-     renderAll(); 
-  });
-}
-function setTravelCollapsed(collapsed, persist = true){
-  $("#travelSection").classList.toggle("hidden", collapsed);
-  travelCollapseBtn.setAttribute("aria-expanded", String(!collapsed));
-  travelCollapseBtn.textContent = collapsed ? "▸" : "▾";
-  if (persist) localStorage.setItem("travelCollapsed", collapsed ? "1" : "0");
-}
-const initialTravelCollapsed = localStorage.getItem("travelCollapsed") === "1";
-setTravelCollapsed(initialTravelCollapsed, false);
+  const pickMostCurrentDay = (days) => {
+    if (!days || !days.length) return null;
+    const todayYmd = ymdInTZ(new Date().toISOString());
+    for (const d of days) if (ymdInTZ(d) >= todayYmd) return d;
+    return days[days.length - 1];
+  };
 
-travelCollapseBtn.onclick = () =>
-  setTravelCollapsed(!$("#travelSection").classList.contains("hidden"));
-    const brandLogo  = $("#brandLogo");
-const setLogoBtn = $("#setLogoBtn");
-const logoDialog = $("#logoDialog");
-const logoInput  = $("#logoInput");
-const logoSave   = $("#logoSave");
-const logoCancel = $("#logoCancel");
-const logoFile  = $("#logoFile");
+  const sanitizeUrl = (u) => {
+    if (!u) return "";
+    let s = u.trim();
+    if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+    return s;
+  };
 
-    // dialogs
-    const meetingDialog = $("#meetingDialog");
-    const dlgSave = $("#dlgSave");
-    const dlgCancel = $("#dlgCancel");
-    const dlgTitle = $("#dlgTitle");
-    const m_title = $("#m_title");
-    const m_location = $("#m_location");
-    const m_booth = $("#m_booth");
-    const m_start = $("#m_start");
-    const m_end = $("#m_end");
-    const m_desc = $("#m_desc");
+  // ========= Firestore refs (provided by your app env) =========
+  // These must exist in the page scope: db, COL, onSharedDoc, getSharedDoc, setSharedDoc
+  const MEETINGS = COL.doc('meetings').collection('items');
+  const TRAVEL   = COL.doc('travel').collection('items');
+  const SESSIONS = COL.doc('sessions').collection('items');
+
+  const upsertMeeting = (m) => {
+    const id = m.id || uid();
+    return MEETINGS.doc(id).set({ ...m, id }, { merge: true });
+  };
+  const deleteMeeting = (id) => MEETINGS.doc(id).delete();
+
+  const upsertTravel = (t) => {
+    const id = t.id || uid();
+    return TRAVEL.doc(id).set({ ...t, id }, { merge: true });
+  };
+  const deleteTravel = (id) => TRAVEL.doc(id).delete();
+
+  const upsertSession = (s) => {
+    const id = s.id || uid();
+    return SESSIONS.doc(id).set({ ...s, id }, { merge: true });
+  };
+  const deleteSession = (id) => SESSIONS.doc(id).delete();
+
+  // ========= State =========
+  let gptUrl   = "";
+  let logoUrl  = "";
+  let meetings = [];
+  let sessions = [];
+  let travel   = [];
+  let activeDate = new Date().toISOString();
+  let view = "agenda";
+  let autoPickedDayOnce = false;
+
+  const TOP_TABS = ["schedule", "travel", "gpt", "meetings"];
+  let activeTopTab = localStorage.getItem("activeTopTab") || "gpt";
+
+  // ========= Elements =========
+  const activeDateLbl = $("#activeDateLbl");
+  const prevDayBtn = $("#prevDay");
+  const nextDayBtn = $("#nextDay");
+  const tabAgenda  = $("#tabAgenda");
+  const tabHourly  = $("#tabHourly");
+  const agendaList = $("#agendaList");
+  const hourlyGrid = $("#hourlyGrid");
+  const addMeetingBtn = $("#addMeetingBtn");
+  const detailsCol = $("#detailsCol");
+
+  const travelSection  = $("#travelSection");
+  const travelCollapseBtn = $("#travelCollapseBtn");
+
+  // Meeting dialog
+  const meetingDialog = $("#meetingDialog");
+  const dlgTitle = $("#dlgTitle");
+  const dlgSave  = $("#dlgSave");
+  const dlgCancel= $("#dlgCancel");
+  const m_title  = $("#m_title");
+  const m_location = $("#m_location");
+  const m_booth  = $("#m_booth");
+  const m_start  = $("#m_start");
+  const m_end    = $("#m_end");
+  const m_desc   = $("#m_desc");
+  const m_dateTBD = $("#m_dateTBD");
+  const m_timeTBD = $("#m_timeTBD");
   const rowDateTimes = $("#rowDateTimes");
-const m_dateTBD = $("#m_dateTBD");
-const m_timeTBD = $("#m_timeTBD");
-const rowDateOnly = $("#rowDateOnly");
-const m_dateOnly = $("#m_dateOnly"); 
-const attendeeEditorRoot = $("#attendeeEditor");
-const addAttendeeBtn = $("#addAttendeeBtn");
-let currentAttendees = [];
+  const rowDateOnly  = $("#rowDateOnly");
+  const m_dateOnly   = $("#m_dateOnly");
 
-const blankAttendee = () => ({
-  id: uid(),
-  name: "",
-  title: "",
-  company: "",
-  linkedin: "",
-  photoUrl: "",
-  notes: "",
-  email: "",         // ← NEW
-  phone: ""          // ← NEW
-});
-function sanitizeUrl(u){
-  if(!u) return "";
-  let s = u.trim();
-  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
-  return s;
-}
+  // Attendees editor
+  const attendeeEditorRoot = $("#attendeeEditor");
+  const addAttendeeBtn = $("#addAttendeeBtn");
+  let currentAttendees = [];
+  const blankAttendee = () => ({ id: uid(), name: "", title: "", company: "", linkedin: "", photoUrl: "", notes: "", email: "", phone: "" });
 
+  // Travel dialog
+  const travelDialog = $("#travelDialog");
+  const t_type   = $("#t_type");
+  const t_label  = $("#t_label");
+  const t_conf   = $("#t_conf");
+  const t_details= $("#t_details");
+  const t_start  = $("#t_start");
+  const t_end    = $("#t_end");
+  const t_startDate = $("#t_startDate");
+  const t_endDate   = $("#t_endDate");
+  const t_rowDateTime = $("#t_rowDateTime");
+  const t_rowDateOnly = $("#t_rowDateOnly");
+  const t_save   = $("#t_save");
+  const t_cancel = $("#t_cancel");
 
-function buildAttendeeRow(a){
-  const wrap = document.createElement("div");
-  wrap.className = "ae";
-  wrap.dataset.id = a.id;
+  // Logo + personal GPT
+const brandLogo   = $("#brandLogo");
+const setLogoBtn  = $("#setLogoBtn");                 // ← add back
+const setLogoUrlBtn = $("#setLogoUrlBtn"); 
+  const logoDialog = $("#logoDialog");
+  const logoInput  = $("#logoInput");
+  const logoSave   = $("#logoSave");
+  const logoCancel = $("#logoCancel");
+  const logoFile   = $("#logoFile");
+  if (setLogoUrlBtn) setLogoUrlBtn.onclick = () => logoDialog.showModal();
+  const openGptBtn = $("#openGptBtn");
+  const gptDialog  = $("#gptDialog");
+  const gptInput   = $("#gptInput");
+  const gptSave    = $("#gptSave");
+  const gptCancel  = $("#gptCancel");
 
-  const grid = document.createElement("div");
-  grid.className = "ae-grid";
+  // Assistant chat (frontend only)
+  const chatWindow = $("#chatWindow");
+  const chatForm   = $("#chatForm");
+  const chatInput  = $("#chatInput");
+  const chatSend   = $("#chatSend");
 
-  // Avatar / preview
-  const avatar = document.createElement("div");
-  avatar.className = "ae-avatar";
-  if (a.photoUrl) {
-    const img = document.createElement("img");
-    img.src = a.photoUrl;
-    avatar.append(img);
-  } else {
-    avatar.textContent = (a.name || "?").slice(0,1).toUpperCase();
+  // ========= Helpers (UI/DOM) =========
+  function updateTravelDateInputs() {
+    const isHotel = (t_type.value === "hotel");
+    t_rowDateTime.classList.toggle("hidden", isHotel);
+    t_rowDateOnly.classList.toggle("hidden", !isHotel);
   }
 
-  // Right side
-  const right = document.createElement("div");
-  right.className = "col gap8";
-
-  // Row 1: name + title
-  const row1 = document.createElement("div");
-  row1.className = "ae-two";
-  const inName = document.createElement("input");
-  inName.placeholder = "Full name";
-  inName.value = a.name || "";
-  inName.name = "a_name";
-
-  const inTitle = document.createElement("input");
-  inTitle.placeholder = "Job title";
-  inTitle.value = a.title || "";
-  inTitle.name = "a_title";
-  row1.append(inName, inTitle);
-
-  // Row 2: company + linkedin (+ Open button)
- const row2 = document.createElement("div");
-row2.className = "ae-two";
-
-const inCompany = document.createElement("input");
-inCompany.placeholder = "Company";
-inCompany.value = a.company || "";
-inCompany.name = "a_company";
-
-const linkWrap = document.createElement("div");
-linkWrap.className = "ae-linkwrap";
-
-const inLinkedin = document.createElement("input");
-inLinkedin.placeholder = "LinkedIn URL (https://…)";
-inLinkedin.value = a.linkedin || "";
-inLinkedin.name = "a_linkedin";
-
-const btnOpen = document.createElement("button");
-btnOpen.className = "btn sm";
-btnOpen.type = "button";
-btnOpen.textContent = "🔗 Open";
-btnOpen.disabled = !inLinkedin.value.trim();
-
-btnOpen.onclick = () => {
-  const url = sanitizeUrl(inLinkedin.value);
-  if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
-};
-inLinkedin.addEventListener("input", () => {
-  btnOpen.disabled = !inLinkedin.value.trim();
-});
-
-linkWrap.append(inLinkedin, btnOpen);
-row2.append(inCompany, linkWrap);
-
-// Row 2.5: email + phone (NEW)
-const rowContact = document.createElement("div");
-rowContact.className = "ae-two";
-
-const inEmail = document.createElement("input");
-inEmail.type = "email";
-inEmail.placeholder = "Email";
-inEmail.value = a.email || "";
-inEmail.name = "a_email";
-
-const inPhone = document.createElement("input");
-inPhone.type = "tel";
-inPhone.placeholder = "Phone";
-inPhone.value = a.phone || "";
-inPhone.name = "a_phone";
-
-rowContact.append(inEmail, inPhone);
-
-// Photo controls: hidden data URL, file input, clear button
-const inPhotoHidden = document.createElement("input");
-inPhotoHidden.type = "hidden";
-inPhotoHidden.name = "a_photo";
-inPhotoHidden.value = a.photoUrl || "";
-
-const inPhotoFile = document.createElement("input");
-inPhotoFile.type = "file";
-inPhotoFile.accept = "image/*";
-
-const btnClearPhoto = document.createElement("button");
-btnClearPhoto.className = "btn sm";
-btnClearPhoto.type = "button";
-btnClearPhoto.textContent = "🧹 Clear photo";
-btnClearPhoto.style.marginLeft = "8px";
-btnClearPhoto.onclick = () => {
-  a.photoUrl = "";
-  inPhotoHidden.value = "";
-  avatar.innerHTML = (inName.value || "?").slice(0,1).toUpperCase();
-};
-
-inPhotoFile.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  try {
-    const dataUrl = await fileToDataUrl(file, { maxW: 256, maxH: 256, quality: 0.9 });
-    a.photoUrl = dataUrl;
-    inPhotoHidden.value = dataUrl;
-
-    avatar.innerHTML = "";
-    const img2 = document.createElement("img");
-    img2.src = dataUrl;
-    avatar.append(img2);
-  } catch (err) {
-    console.error(err);
-    alert("Could not read that image. Try a PNG or JPG.");
-  } finally {
-    inPhotoFile.value = "";
-  }
-});
-
-// keep the initial letter live if there's no photo
-inName.addEventListener("input", () => {
-  if (!inPhotoHidden.value){
-    avatar.textContent = (inName.value || "?").slice(0,1).toUpperCase();
-  }
-});
-
-const photoRow = document.createElement("div");
-photoRow.className = "ae-two";
-const photoLeft = document.createElement("div");
-const photoRight = document.createElement("div");
-photoLeft.append(inPhotoFile, btnClearPhoto);
-photoRow.append(photoLeft, photoRight);
-
-// Notes
-const inNotes = document.createElement("textarea");
-inNotes.placeholder = "Notes";
-inNotes.value = a.notes || "";
-
-// Remove button
-const actions = document.createElement("div");
-actions.className = "ae-actions";
-const btnRemove = document.createElement("button");
-btnRemove.className = "btn sm";
-btnRemove.textContent = "🗑️ Remove";
-btnRemove.onclick = () => {
-  currentAttendees = currentAttendees.filter(x => x.id !== a.id);
-  renderAttendeeEditor(currentAttendees);
-};
-actions.append(btnRemove);
-
-// Assemble (only once; include rowContact before photoRow)
-right.append(row1, row2, rowContact, photoRow, inPhotoHidden, inNotes);
-grid.append(avatar, right);
-wrap.append(grid, actions);
-return wrap;
-}
-function renderAttendeeEditor(list){
-  attendeeEditorRoot.innerHTML = "";
-  if (!list || list.length === 0){
-    const empty = document.createElement("div");
-    empty.className = "muted";
-    empty.textContent = "No attendees yet.";
-    attendeeEditorRoot.append(empty);
-    return;
-  }
-  list.forEach(a => attendeeEditorRoot.append(buildAttendeeRow(a)));
-}
-
-function collectAttendeesFromEditor(){
-  const rows = Array.from(attendeeEditorRoot.querySelectorAll(".ae"));
-  return rows.map(row => {
-    const id = row.dataset.id;
-    const inName     = row.querySelector('input[name="a_name"]');
-    const inTitle    = row.querySelector('input[name="a_title"]');
-    const inCompany  = row.querySelector('input[name="a_company"]');
-    const inLinkedin = row.querySelector('input[name="a_linkedin"]');
-        const inEmail    = row.querySelector('input[name="a_email"]');   // NEW
-    const inPhone    = row.querySelector('input[name="a_phone"]');  
-    const inPhoto    = row.querySelector('input[name="a_photo"]');
-    const inNotes    = row.querySelector('textarea');
-
-    return {
-      id,
-      name: (inName?.value || "").trim(),
-      title: (inTitle?.value || "").trim(),
-      company: (inCompany?.value || "").trim(),
-      linkedin: (inLinkedin?.value || "").trim(),
-      photoUrl: (inPhoto?.value || "").trim(),   // data URL from the file upload
-      notes: (inNotes?.value || "").trim(),
-        email: (inEmail?.value || "").trim(),    // ← NEW
-  phone: (inPhone?.value || "").trim()     // ← NEW
-    };
-  });
-}
-const t_label = $("#t_label");
-    const travelDialog = $("#travelDialog");
-    const t_type = $("#t_type");
-    const t_conf = $("#t_conf");
-    const t_details = $("#t_details");
-    const t_start = $("#t_start");
-    const t_end = $("#t_end");
-    const t_save = $("#t_save");
-    const t_cancel = $("#t_cancel");
-// --- GPT Link wiring (place with other const element bindings) ---
-const openGptBtn = document.getElementById("openGptBtn");
-const gptDialog  = document.getElementById("gptDialog");
-const gptInput   = document.getElementById("gptInput");
-const gptSave    = document.getElementById("gptSave");
-const gptCancel  = document.getElementById("gptCancel");
-
-// keep local state updated if changed elsewhere
-onSharedDoc('gptUrl', v => { gptUrl = v || ""; });
-
-// open personal GPT (or prompt to set it)
-openGptBtn.onclick = () => {
-  if (gptUrl && /^https?:\/\//i.test(gptUrl)) {
-    window.open(gptUrl, "_blank", "noopener,noreferrer");
-  } else {
-    gptInput.value = gptUrl || "";
-    gptDialog.showModal();
-  }
-};
-
-// save from dialog
-gptSave.onclick = async () => {
-  let url = (gptInput.value || "").trim();
-  if (!url) { gptDialog.close(); return; }
-  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-  try {
-    await setSharedDoc("gptUrl", url);
-    gptUrl = url;
-  } catch (err) {
-    alert("Could not save GPT link: " + (err.code || err.message || "unknown error"));
-  } finally {
-    gptDialog.close();
-  }
-};
-gptCancel.onclick = () => gptDialog.close();
-function daysFromCalendar(){
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year:'numeric', month:'2-digit', day:'2-digit'
-  });
-  const byDay = new Map();
-
-  // include meetings that have a date (dateTBD=false) + all sessions
-  [...meetings.filter(m => !m.dateTBD), ...sessions].forEach(x => {
-    const k = fmt.format(new Date(x.startISO));
-    const cur = byDay.get(k);
-    if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(k, x.startISO);
-  });
-
-  // ensure the anchor day appears if we have any Date TBD meetings
-  if (meetings.some(m => m.dateTBD) && !byDay.has(TBD_ANCHOR_YMD)) {
-    byDay.set(TBD_ANCHOR_YMD, new Date('2025-09-02T12:00:00Z').toISOString());
+  function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('File read failed'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Image decode failed'));
+        img.onload = () => {
+          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+          const w = Math.round(img.width * ratio);
+          const h = Math.round(img.height * ratio);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const wantPng = file.type.includes('png') || file.type.includes('svg');
+          const mime = wantPng ? 'image/png' : 'image/jpeg';
+          resolve(canvas.toDataURL(mime, quality));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
-  return Array.from(byDay.values()).sort((a,b)=> new Date(a) - new Date(b));
-}
- function shiftDay(dir){
-   const days = daysFromCalendar();
-  const idx = days.findIndex(d => sameDay(d, activeDate)); // both ISO strings
-  const next = days[idx + dir];
-  if (next) activeDate = next;
-  renderAll();
-}
-    function renderHeaderControls(){
-      activeDateLbl.textContent = fmtDate(activeDate);
-      tabAgenda.classList.toggle("active", view==="agenda");
-      tabHourly.classList.toggle("active", view==="hourly");
+  function setTravelCollapsed(collapsed, persist = true) {
+    travelSection.classList.toggle("hidden", collapsed);
+    travelCollapseBtn.setAttribute("aria-expanded", String(!collapsed));
+    travelCollapseBtn.textContent = collapsed ? "▸" : "▾";
+    if (persist) localStorage.setItem("travelCollapsed", collapsed ? "1" : "0");
+  }
+
+  function daysFromCalendar() {
+    const byDay = new Map();
+    // include meetings with known date + all sessions
+    [...meetings.filter(m => !m.dateTBD), ...sessions].forEach(x => {
+      const key = ymdInTZ(x.startISO);
+      const cur = byDay.get(key);
+      if (!cur || new Date(x.startISO) < new Date(cur)) byDay.set(key, x.startISO);
+    });
+    // ensure anchor day if there are any Date-TBD meetings
+    if (meetings.some(m => m.dateTBD) && !byDay.has(TBD_ANCHOR_YMD)) {
+      byDay.set(TBD_ANCHOR_YMD, new Date('2025-09-02T12:00:00Z').toISOString());
     }
-const SESSIONS = COL.doc('sessions').collection('items');
-
-// Helpers
-function upsertSession(s){
-  const id = s.id || uid();
-  return SESSIONS.doc(id).set({ ...s, id }, { merge:true });
-}
-function deleteSession(id){ return SESSIONS.doc(id).delete(); }
-
-// State
-
-    let autoPickedDayOnce = false; 
-SESSIONS.orderBy('startISO').onSnapshot(async snap => {
-  sessions = snap.docs.map(d => d.data());
-
-  const sDays = daysFromCalendar();
-  // If no active day yet or it fell off-screen, pick the most current day.
-  if (sDays.length && (!sDays.some(d => sameDay(d, activeDate)) || !autoPickedDayOnce)) {
-    const best = pickMostCurrentDay(sDays);
-    if (best) {
-      activeDate = best;
-      autoPickedDayOnce = true;
-    }
+    return Array.from(byDay.values()).sort((a, b) => new Date(a) - new Date(b));
   }
 
-  renderAll();
-});
-function itemsForDay(iso){
-  const m = meetings
-    .filter(x => sameDay(x.startISO, iso))
-    .map(x => ({ ...x, kind: 'meeting' }));
+  function shiftDay(dir) {
+    const days = daysFromCalendar();
+    const idx = days.findIndex(d => sameDay(d, activeDate));
+    const next = days[idx + dir];
+    if (next) activeDate = next;
+    renderAll();
+  }
 
-  const s = sessions
-    .filter(x => sameDay(x.startISO, iso))
-    .map(x => ({ ...x, kind: 'session' }));
+  function renderHeaderControls() {
+    activeDateLbl.textContent = fmtDate(activeDate);
+    tabAgenda.classList.toggle("active", view === "agenda");
+    tabHourly.classList.toggle("active", view === "hourly");
+  }
 
-  return [...m, ...s].sort((a,b)=> new Date(a.startISO) - new Date(b.startISO));
-}
- function renderAgenda(){
-  agendaList.innerHTML = "";
+  function itemsForDay(iso) {
+    const m = meetings.filter(x => sameDay(x.startISO, iso)).map(x => ({ ...x, kind: 'meeting' }));
+    const s = sessions.filter(x => sameDay(x.startISO, iso)).map(x => ({ ...x, kind: 'session' }));
+    return [...m, ...s].sort((a, b) => new Date(a.startISO) - new Date(b.startISO));
+  }
 
-  // Unscheduled (date TBD) section (only on anchor day)
-  const unscheduled = meetings.filter(m => m.dateTBD);
-  if (isAnchorDay(activeDate) && unscheduled.length){
-    const hdr = document.createElement("div");
-    hdr.className = "kicker";
-    hdr.textContent = "Unscheduled (TBD date)";
-    agendaList.append(hdr);
+  function focusMeetingInDetails(id) {
+    const el = document.getElementById(`detail-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.add("pulse");
+    setTimeout(() => el.classList.remove("pulse"), 1200);
+  }
 
-    unscheduled.forEach(m => {
-      const card = document.createElement("div"); card.className = "item meeting clickable";
+  function appendMsg(role, text) {
+    const row = document.createElement("div");
+    row.className = `msg ${role}`;
+    row.innerHTML = `<div class="who">${role === "user" ? "You" : "Assistant"}</div>
+                     <div class="bubble">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
+    chatWindow.appendChild(row);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  // ========= Renderers =========
+  function renderAgenda() {
+    agendaList.innerHTML = "";
+
+    // Unscheduled on anchor day
+    const unscheduled = meetings.filter(m => m.dateTBD);
+    if (isAnchorDay(activeDate) && unscheduled.length) {
+      const hdr = document.createElement("div");
+      hdr.className = "kicker";
+      hdr.textContent = "Unscheduled (TBD date)";
+      agendaList.append(hdr);
+
+      unscheduled.forEach(m => {
+        const card = document.createElement("div");
+        card.className = "item meeting clickable";
+        const c = document.createElement("div"); c.className = "item-c";
+        const left = document.createElement("div");
+
+        const title = document.createElement("div"); title.className = "title";
+        title.textContent = `TBD • ${m.title}`;
+
+        const sub = document.createElement("div"); sub.className = "sub";
+        const loc = displayLocation(m);
+        const booth = m.booth ? `Booth ${m.booth}` : "";
+        sub.textContent = [loc, booth].filter(Boolean).join(" • ");
+
+        left.append(title, sub);
+
+        const tools = document.createElement("div"); tools.className = "tools";
+        const edit = document.createElement("button"); edit.className = "btn sm"; edit.textContent = "✏️";
+        edit.onclick = (e) => { e.stopPropagation(); openMeetingDialog(m); };
+        const del = document.createElement("button"); del.className = "btn sm"; del.textContent = "🗑️";
+        del.onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm("Delete this meeting?")) return;
+          try { await deleteMeeting(m.id); } catch (e) { console.error(e); alert("Delete failed: " + (e.code || e.message)); }
+        };
+        tools.append(edit, del);
+
+        c.append(left, tools);
+        card.append(c);
+        card.addEventListener("click", () => focusMeetingInDetails(m.id));
+        agendaList.append(card);
+      });
+
+      agendaList.append(Object.assign(document.createElement("div"), { className: "spacer" }));
+    }
+
+    // Scheduled items for active date
+    const items = itemsForDay(activeDate);
+    if (!items.length) {
+      const div = document.createElement("div");
+      div.className = "muted";
+      div.textContent = "No scheduled items for this date.";
+      agendaList.append(div);
+      return;
+    }
+
+    items.forEach(it => {
+      const card = document.createElement("div");
+      card.className = "item";
+      if (it.kind === 'session') card.classList.add('session');
+      else if (it.kind === 'meeting') card.classList.add('meeting');
+      if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')) card.classList.add('afterhours');
+
       const c = document.createElement("div"); c.className = "item-c";
       const left = document.createElement("div");
-
       const title = document.createElement("div"); title.className = "title";
-      title.textContent = `TBD • ${m.title}`;
+      const tLabel = (it.dateTBD || it.timeTBD) ? "TBD" : `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
+      title.textContent = `${tLabel} • ${it.title}`;
 
       const sub = document.createElement("div"); sub.className = "sub";
-      const loc = displayLocation(m);
-      const booth = m.booth ? `Booth ${m.booth}` : "";
+      const loc = displayLocation(it);
+      const booth = it.booth ? `Booth ${it.booth}` : "";
       sub.textContent = [loc, booth].filter(Boolean).join(" • ");
-
       left.append(title, sub);
 
-      const tools = document.createElement("div"); tools.className="tools";
-      const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
-      edit.onclick = (e) => { e.stopPropagation(); openMeetingDialog(m); };
-      const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
-      del.onclick  = async (e) => {
-        e.stopPropagation();
-        if (!confirm("Delete this meeting?")) return;
-        try { await deleteMeeting(m.id); } catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
-      };
-      tools.append(edit, del);
+      const tools = document.createElement("div"); tools.className = "tools";
+      if (it.kind === 'meeting') {
+        const edit = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "✏️" });
+        edit.onclick = (e) => { e.stopPropagation(); openMeetingDialog(it); };
+        const del = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "🗑️" });
+        del.onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm("Delete this meeting?")) return;
+          try { await deleteMeeting(it.id); } catch (e) { console.error(e); alert("Delete failed: " + (e.code || e.message)); }
+        };
+        tools.append(edit, del);
+      } else {
+        const chip = document.createElement("span"); chip.className = "chip"; chip.textContent = "SESSION";
+        tools.append(chip);
+      }
 
       c.append(left, tools);
       card.append(c);
-      card.addEventListener("click", () => focusMeetingInDetails(m.id));
+
+      if (it.kind === 'meeting') {
+        card.classList.add('clickable');
+        card.addEventListener('click', () => focusMeetingInDetails(it.id));
+      }
+
       agendaList.append(card);
     });
-
-    const spacer = document.createElement("div"); spacer.className = "spacer";
-    agendaList.append(spacer);
   }
 
-  // Scheduled items for the active day
-  const items = itemsForDay(activeDate);
-  if (items.length === 0){
-    const div = document.createElement("div");
-    div.className = "muted";
-    div.textContent = "No scheduled items for this date.";
-    agendaList.append(div);
-    return;
-  }
+  function renderHourly() {
+    hourlyGrid.innerHTML = "";
+    const items = itemsForDay(activeDate);
+    const wrap = document.createElement("div"); wrap.className = "hour-grid";
 
-  items.forEach(it => {
-    const card = document.createElement("div");
-    card.className = "item";
-    if (it.kind === 'session') card.classList.add('session');
-    else if (it.kind === 'meeting') card.classList.add('meeting');
-
-    if (it.kind === 'session' && (it.afterHours || it.category === 'afterHours')){
-      card.classList.add('afterhours');
+    // Time-TBD pills for this date
+    const tbdToday = meetings.filter(m => !m.dateTBD && m.timeTBD && sameDay(m.startISO, activeDate));
+    if (tbdToday.length) {
+      const row = document.createElement("div"); row.className = "hour-row";
+      const lbl = document.createElement("div"); lbl.className = "hour-label"; lbl.textContent = "TBD";
+      const cell = document.createElement("div"); cell.className = "hour-cell";
+      const box = document.createElement("div");
+      box.style.display = "flex"; box.style.flexWrap = "wrap"; box.style.gap = "8px";
+      tbdToday.forEach(it => {
+        const pill = document.createElement("span");
+        pill.className = "meeting-pill meeting";
+        pill.style.cursor = "pointer";
+        pill.addEventListener("click", () => focusMeetingInDetails(it.id));
+        const loc = displayLocation(it);
+        pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${loc ? `TBD • ${escapeHtml(loc)}` : "TBD"}</span>`;
+        box.append(pill);
+      });
+      cell.append(box); row.append(lbl, cell); wrap.append(row);
     }
 
-    const c = document.createElement("div"); c.className = "item-c";
+    // Hour rows
+    const startHour = 7, hoursToShow = 17; // 7am–11pm
+    const labelFromHour = (hr) => `${(((hr + 11) % 12) + 1).toString().padStart(2, "0")}:00 ${hr < 12 ? "AM" : "PM"}`;
 
-    const left = document.createElement("div");
-    const title = document.createElement("div"); title.className = "title";
-    const tLabel = (it.dateTBD || it.timeTBD) ? "TBD" : `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
-    title.textContent = `${tLabel} • ${it.title}`;
+    for (let i = 0; i < hoursToShow; i++) {
+      const hr = startHour + i;
+      const row = document.createElement("div"); row.className = "hour-row";
+      const lbl = document.createElement("div"); lbl.className = "hour-label"; lbl.textContent = labelFromHour(hr);
+      const cell = document.createElement("div"); cell.className = "hour-cell";
 
-    const sub = document.createElement("div"); sub.className = "sub";
-    const loc = displayLocation(it);
-    const booth = it.booth ? `Booth ${it.booth}` : "";
-    sub.textContent = [loc, booth].filter(Boolean).join(" • ");
-    left.append(title, sub);
+      const slot = items
+        .filter(it => {
+          if (it.dateTBD || it.timeTBD) return false;
+          const s = ptMinutes(it.startISO);
+          return Math.floor(s / 60) === hr;
+        })
+        .sort((a, b) => new Date(a.startISO) - new Date(b.startISO));
 
-    const tools = document.createElement("div"); tools.className = "tools";
-    if (it.kind === 'meeting') {
-      const edit = document.createElement("button"); edit.className="btn sm"; edit.textContent="✏️";
-      edit.onclick = (e) => { e.stopPropagation(); openMeetingDialog(it); };
+      if (!slot.length) {
+        const g = document.createElement("div"); g.className = "ghost";
+        cell.append(g);
+      } else {
+        const box = document.createElement("div");
+        box.style.display = "flex"; box.style.flexWrap = "wrap"; box.style.gap = "8px";
+        slot.forEach(it => {
+          const pill = document.createElement("span");
+          pill.className = "meeting-pill";
+          if (it.kind === "session") pill.classList.add("session");
+          else if (it.kind === "meeting") pill.classList.add("meeting");
+          if (it.kind === "session" && (it.afterHours || it.category === "afterHours")) pill.classList.add("afterhours");
+          if (it.kind === "meeting") {
+            pill.style.cursor = "pointer";
+            pill.addEventListener("click", () => focusMeetingInDetails(it.id));
+          }
+          const loc = displayLocation(it);
+          const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
+          const meta = loc ? `${timeRange} • ${escapeHtml(loc)}` : timeRange;
+          pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
+          box.append(pill);
+        });
+        cell.append(box);
+      }
 
-      const del = document.createElement("button"); del.className="btn sm"; del.textContent="🗑️";
-      del.onclick = async (e) => {
-        e.stopPropagation();
-        if (!confirm("Delete this meeting?")) return;
-        try { await deleteMeeting(it.id); } catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
+      row.append(lbl, cell);
+      wrap.append(row);
+    }
+
+    hourlyGrid.append(wrap);
+  }
+
+  function renderDetails(target = detailsCol, mode = "day") {
+    target.innerHTML = "";
+    const dayMeetings = (mode === "all")
+      ? meetings
+        .filter(m => m.dateTBD || isSameOrAfterTodayInTZ(m.startISO))
+        .sort((a, b) => (a.dateTBD ? -1 : 0) - (b.dateTBD ? -1 : 0) || (new Date(a.startISO) - new Date(b.startISO)))
+      : meetings
+        .filter(m => sameDay(m.startISO, activeDate) || (m.dateTBD && isAnchorDay(activeDate)))
+        .sort((a, b) => (a.dateTBD ? -1 : 0) - (b.dateTBD ? -1 : 0) || (new Date(a.startISO) - new Date(b.startISO)));
+
+    if (!dayMeetings.length) {
+      const card = document.createElement("div"); card.className = "card";
+      card.innerHTML = `<div class="card-h"><div class="title">No meetings${mode === 'all' ? ' (upcoming)' : ''}</div></div>
+                        <div class="card-c muted">Add one using the button on the left.</div>`;
+      target.append(card);
+      return;
+    }
+
+    dayMeetings.forEach(m => {
+      const card = document.createElement("div"); card.className = "card"; card.id = `detail-${m.id}`;
+
+      const head = document.createElement("div"); head.className = "card-h";
+
+      const t = document.createElement("div"); t.className = "title row";
+      const leftT = document.createElement("span"); leftT.textContent = m.title;
+      const rightT = document.createElement("span"); rightT.className = "muted";
+      let timePart;
+      if (m.dateTBD) timePart = "TBD date";
+      else if (m.timeTBD) timePart = "TBD time";
+      else timePart = `${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
+      const dateLabel = m.dateTBD ? 'TBD' : fmtDate(m.startISO);
+      rightT.textContent = `${dateLabel} • ${timePart}`;
+      t.append(leftT, rightT);
+
+      if (mode === "all") {
+        const editHeadBtn = document.createElement("button");
+        editHeadBtn.className = "btn sm"; editHeadBtn.textContent = "✏️ Edit"; editHeadBtn.title = "Edit meeting";
+        editHeadBtn.onclick = (e) => { e.stopPropagation(); openMeetingDialog(m); };
+        t.append(editHeadBtn);
+      }
+      head.append(t);
+
+      const where = displayLocation(m);
+      if (where) {
+        const locLine = document.createElement("div");
+        locLine.className = "desc";
+        locLine.textContent = where;
+        head.append(locLine);
+      }
+
+      const c = document.createElement("div"); c.className = "card-c";
+      const inner = document.createElement("div"); inner.className = "details-grid";
+      inner.style.gridTemplateColumns = "1fr 2fr"; inner.style.gap = "16px";
+
+      // Right column: attendees
+      const rightCol = document.createElement("div");
+      const ak = document.createElement("div"); ak.className = "kicker"; ak.textContent = "Attendees";
+      rightCol.append(ak);
+      (m.attendees || []).forEach(a => {
+        const wrap = document.createElement("div"); wrap.className = "attendee";
+        const row = document.createElement("div"); row.className = "row";
+        const who = document.createElement("div"); who.className = "row"; who.style.gap = "12px";
+        const av = document.createElement("div"); av.className = "avatar";
+        if (a.photoUrl) {
+          const img = document.createElement("img"); img.src = a.photoUrl; img.alt = a.name || "Photo"; img.className = "avatar-img";
+          av.append(img);
+        } else {
+          av.textContent = (a.name || "?").slice(0, 1).toUpperCase();
+        }
+        const meta = document.createElement("div");
+        const nm = document.createElement("div"); nm.className = "name"; nm.textContent = a.name;
+        const sub = document.createElement("div"); sub.className = "role"; sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
+        meta.append(nm, sub);
+        who.append(av, meta);
+
+        const link = document.createElement("a"); link.className = "link"; link.textContent = "LinkedIn"; link.target = "_blank"; link.rel = "noreferrer";
+        if (a.linkedin) link.href = a.linkedin; else { link.href = "#"; link.style.pointerEvents = "none"; link.style.opacity = ".5"; }
+
+        row.append(who, link);
+        wrap.append(row);
+
+        if (a.notes) {
+          const notes = document.createElement("div"); notes.style.marginTop = "6px"; notes.textContent = a.notes;
+          wrap.append(notes);
+        }
+
+        const contact = document.createElement("div");
+        contact.style.marginTop = "6px"; contact.style.display = "flex"; contact.style.gap = "8px"; contact.style.flexWrap = "wrap";
+        if (a.email) {
+          const emailLink = document.createElement("a"); emailLink.className = "chip"; emailLink.href = `mailto:${a.email}`; emailLink.textContent = a.email;
+          contact.append(emailLink);
+        }
+        if (a.phone) {
+          const phoneLink = document.createElement("a"); phoneLink.className = "chip";
+          const tel = a.phone.replace(/[^\d+\-\s()]/g, "");
+          phoneLink.href = `tel:${tel}`; phoneLink.textContent = a.phone;
+          contact.append(phoneLink);
+        }
+        if (contact.children.length) wrap.append(contact);
+
+        rightCol.append(wrap);
+      });
+
+      // Left column: description / points / prep
+      const leftCol = document.createElement("div");
+      if (m.description) leftCol.append(renderNotes(m.description));
+      if (m.talkingPoints) {
+        const k = document.createElement("div"); k.className = "kicker"; k.textContent = "Suggested talking points";
+        const box = document.createElement("div"); box.style.background = "var(--primary-50)"; box.style.borderRadius = "12px"; box.style.padding = "12px";
+        box.append(renderNotes(m.talkingPoints)); leftCol.append(k, box);
+      }
+      if (m.prepChecklist) {
+        const k = document.createElement("div"); k.className = "kicker"; k.textContent = "Prep checklist";
+        const box = document.createElement("div"); box.style.background = "var(--primary-50)"; box.style.borderRadius = "12px"; box.style.padding = "12px";
+        box.append(renderNotes(m.prepChecklist)); leftCol.append(k, box);
+      }
+      const edit = document.createElement("button"); edit.className = "btn"; edit.textContent = "✏️ Edit details";
+      edit.onclick = () => openMeetingDialog(m);
+      leftCol.append(edit);
+
+      inner.append(rightCol, leftCol);
+      c.append(inner);
+      card.append(head, c);
+      target.append(card);
+    });
+  }
+
+  function renderTravel() {
+    const root = travelSection;
+    root.innerHTML = "";
+
+    const add = Object.assign(document.createElement("button"), { className: "btn", textContent: "➕ Add travel" });
+    add.onclick = () => {
+      t_type.value = "flight";
+      t_label.value = ""; t_conf.value = ""; t_details.value = "";
+      t_start.value = ""; t_end.value = "";
+      t_startDate.value = ""; t_endDate.value = "";
+      updateTravelDateInputs();
+      travelDialog.dataset.editId = "";
+      travelDialog.showModal();
+    };
+    root.append(add);
+
+    const spacer = document.createElement("div"); spacer.className = "spacer";
+    root.append(spacer);
+
+    if (!travel.length) {
+      const div = document.createElement("div"); div.className = "muted"; div.textContent = "No travel saved.";
+      root.append(div);
+      return;
+    }
+
+    const toYMD = (iso) => {
+      if (!iso) return "";
+      const d = new Date(iso);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    travel.forEach(t => {
+      const row = document.createElement("div"); row.className = "item";
+      const inner = document.createElement("div"); inner.className = "item-c";
+
+      const left = document.createElement("div");
+      const head = document.createElement("div"); head.className = "title";
+      head.textContent = `[${t.type.toUpperCase()}] ${t.label}`;
+
+      const sub = document.createElement("div"); sub.className = "muted"; sub.style.fontSize = "12px";
+      const bits = [];
+      if (t.confirmation) bits.push(`Conf#: ${t.confirmation}`);
+      if (t.type === "hotel") {
+        if (t.startISO) bits.push(`Check-in ${fmtDate(t.startISO)}`);
+        if (t.endISO)   bits.push(`Check-out ${fmtDate(t.endISO)}`);
+      } else {
+        if (t.startISO) bits.push(`Start ${fmtDate(t.startISO)} ${fmtTime(t.startISO)}`);
+        if (t.endISO)   bits.push(`End ${fmtDate(t.endISO)} ${fmtTime(t.endISO)}`);
+      }
+      sub.textContent = bits.join(" • ");
+
+      if (t.details) {
+        const d = document.createElement("div"); d.style.fontSize = "12px"; d.textContent = t.details;
+        left.append(head, sub, d);
+      } else {
+        left.append(head, sub);
+      }
+
+      const tools = document.createElement("div"); tools.className = "tools";
+      const edit = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "✏️" });
+      edit.onclick = () => {
+        t_type.value = t.type;
+        t_label.value = t.label;
+        t_conf.value = t.confirmation || "";
+        t_details.value = t.details || "";
+        if (t.type === "hotel") {
+          t_startDate.value = toYMD(t.startISO);
+          t_endDate.value   = toYMD(t.endISO);
+          t_start.value = ""; t_end.value = "";
+        } else {
+          t_start.value = t.startISO ? new Date(t.startISO).toISOString().slice(0, 16) : "";
+          t_end.value   = t.endISO   ? new Date(t.endISO).toISOString().slice(0, 16)   : "";
+          t_startDate.value = ""; t_endDate.value = "";
+        }
+        updateTravelDateInputs();
+        travelDialog.dataset.editId = t.id;
+        travelDialog.showModal();
+      };
+
+      const del = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "🗑️" });
+      del.onclick = async () => {
+        if (!confirm("Delete this travel item?")) return;
+        try { await deleteTravel(t.id); }
+        catch (e) { console.error(e); alert("Delete failed: " + (e.code || e.message)); }
       };
 
       tools.append(edit, del);
-    } else {
-      const chip = document.createElement("span"); chip.className = "chip"; chip.textContent = "SESSION";
-      tools.append(chip);
-    }
-
-    c.append(left, tools);
-    card.append(c);
-
-    if (it.kind === 'meeting') {
-      card.classList.add('clickable');
-      card.addEventListener('click', () => focusMeetingInDetails(it.id));
-    }
-
-    agendaList.append(card);
-  });
-}
-
-function renderHourly(){
-  hourlyGrid.innerHTML = "";
-  const items = itemsForDay(activeDate);
-
-  const wrap = document.createElement("div");
-  wrap.className = "hour-grid";
-
-  // --- TBD time pills for meetings on this date ---
-  const tbdToday = meetings.filter(
-    m => !m.dateTBD && m.timeTBD && sameDay(m.startISO, activeDate)
-  );
-  if (tbdToday.length){
-    const row  = document.createElement("div"); row.className  = "hour-row";
-    const lbl  = document.createElement("div"); lbl.className  = "hour-label"; lbl.textContent = "TBD";
-    const cell = document.createElement("div"); cell.className = "hour-cell";
-
-    const box = document.createElement("div");
-    box.style.display = "flex"; box.style.flexWrap = "wrap"; box.style.gap = "8px";
-tbdToday.forEach(it => {
-  const pill = document.createElement("span");
-  pill.className = "meeting-pill meeting";
-  pill.style.cursor = "pointer";
-  pill.addEventListener("click", () => focusMeetingInDetails(it.id));
-
-  const loc  = displayLocation(it);
-  const meta = loc ? `TBD • ${escapeHtml(loc)}` : "TBD";
-  pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
-  box.append(pill);
-});
-    cell.append(box);
-    row.append(lbl, cell);
-    wrap.append(row);
-  }
-    
-  // --- Hourly grid (PT) ---
-  const startHour = 7;        // 7 AM PT
-  const hoursToShow = 17;     // 7am–11pm
-
-  const labelFromHour = (hr) => {
-    const h12 = ((hr + 11) % 12) + 1;
-    const ampm = hr < 12 ? "AM" : "PM";
-    return `${h12.toString().padStart(2,"0")}:00 ${ampm}`;
-  };
-
-  for (let i = 0; i < hoursToShow; i++){
-    const hr = startHour + i;
-
-    const row  = document.createElement("div"); row.className  = "hour-row";
-    const lbl  = document.createElement("div"); lbl.className  = "hour-label"; lbl.textContent = labelFromHour(hr);
-    const cell = document.createElement("div"); cell.className = "hour-cell";
-
-    const slot = items
-      .filter(it => {
-        if (it.dateTBD || it.timeTBD) return false;       // skip unscheduled here
-        const s = ptMinutes(it.startISO);                 // minutes since midnight PT
-        return Math.floor(s / 60) === hr;                 // bucket by START hour only
-      })
-      .sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
-
-    if (slot.length === 0){
-      const g = document.createElement("div");
-      g.className = "ghost";
-      cell.append(g);
-    } else {
-      const box = document.createElement("div");
-      box.style.display = "flex"; box.style.flexWrap = "wrap"; box.style.gap = "8px";
-
-      slot.forEach(it => {
-        const pill = document.createElement("span");
-        pill.className = "meeting-pill";
-        if (it.kind === "session") pill.classList.add("session");
-        else if (it.kind === "meeting") pill.classList.add("meeting");
-        if (it.kind === "session" && (it.afterHours || it.category === "afterHours")){
-          pill.classList.add("afterhours");
-        }
-if (it.kind === "meeting") {
-  pill.style.cursor = "pointer";
-  pill.addEventListener("click", () => focusMeetingInDetails(it.id));
-}
-        const loc = displayLocation(it);
-        const timeRange = `${fmtTime(it.startISO)}–${fmtTime(it.endISO)}`;
-        const meta = loc ? `${timeRange} • ${escapeHtml(loc)}` : timeRange;
-        pill.innerHTML = `<strong>${escapeHtml(it.title)}</strong> <span class="muted">${meta}</span>`;
-        box.append(pill);
-      });
-
-      cell.append(box);
-    }
-
-    row.append(lbl, cell);
-    wrap.append(row);
-  }
-
-  hourlyGrid.append(wrap);
-}
-
-function renderDetails(target = detailsCol, mode = "day"){
-  target.innerHTML = "";
-
-  const dayMeetings = (mode === "all")
-    // ALL UPCOMING: include Date-TBD OR (today-or-future in TZ)
-    ? meetings
-        .filter(m => m.dateTBD || isSameOrAfterTodayInTZ(m.startISO))
-        .sort((a,b) =>
-          (a.dateTBD?-1:0) - (b.dateTBD?-1:0) || (new Date(a.startISO) - new Date(b.startISO))
-        )
-    // EXISTING “active date” behavior
-    : meetings
-        .filter(m =>
-          sameDay(m.startISO, activeDate) ||
-          (m.dateTBD && isAnchorDay(activeDate))
-        )
-        .sort((a,b) =>
-          (a.dateTBD?-1:0) - (b.dateTBD?-1:0) || (new Date(a.startISO) - new Date(b.startISO))
-        );
-
-  if (dayMeetings.length === 0){
-    const card = document.createElement("div"); card.className="card";
-    card.innerHTML = `<div class="card-h"><div class="title">No meetings${mode==='all'?' (upcoming)':''}</div></div>
-                      <div class="card-c muted">Add one using the button on the left.</div>`;
-    target.append(card);
-    return;
-  }
-
-  dayMeetings.forEach(m => {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.id = `detail-${m.id}`;
-
-    const head = document.createElement("div"); 
-    head.className = "card-h";
-
-    // Title row
-    const t = document.createElement("div"); 
-    t.className = "title row";
-    const leftT = document.createElement("span"); 
-    leftT.textContent = m.title;
-    const rightT = document.createElement("span"); 
-    rightT.className = "muted";
-
-    let timePart;
-    if (m.dateTBD) timePart = "TBD date";
-    else if (m.timeTBD) timePart = "TBD time";
-    else timePart = `${fmtTime(m.startISO)}–${fmtTime(m.endISO)}`;
-
-    const dateLabel =
-      m.dateTBD ? 'TBD' : fmtDate(m.startISO);
-
-    rightT.textContent = `${dateLabel} • ${timePart}`;
-    t.append(leftT, rightT);
-    if (mode === "all") {
-  const editHeadBtn = document.createElement("button");
-  editHeadBtn.className = "btn sm";
-  editHeadBtn.textContent = "✏️ Edit";
-  editHeadBtn.title = "Edit meeting";
-  editHeadBtn.onclick = (e) => {
-    e.stopPropagation();
-    openMeetingDialog(m);
-  };
-  // Put the edit button on the right side of the title row
-  t.append(editHeadBtn);
-}
-    head.append(t);
-
-
- const where = displayLocation(m);
-if (where) {
-  const locLine = document.createElement("div");
-  locLine.className = "desc";
-  locLine.textContent = where;   // location only
-  head.append(locLine);
-}
-    // Body (unchanged)
-    const c = document.createElement("div"); 
-    c.className = "card-c";
-
-    const inner = document.createElement("div");
-    inner.className = "details-grid";
-    inner.style.gridTemplateColumns="1fr 2fr";
-    inner.style.gap="16px";
-
-    // Right column: attendees (unchanged)
-    const rightCol = document.createElement("div");
-    const ak = document.createElement("div"); ak.className="kicker"; ak.textContent="Attendees";
-    rightCol.append(ak);
-    (m.attendees||[]).forEach(a => {
-      const wrap = document.createElement("div"); wrap.className="attendee";
-    
-      const row = document.createElement("div"); row.className="row";
-      const who = document.createElement("div"); who.className="row"; who.style.gap="12px";
-      const av = document.createElement("div"); av.className = "avatar";
-      if (a.photoUrl) {
-        const img = document.createElement("img"); img.src = a.photoUrl; img.alt = a.name || "Photo"; img.className = "avatar-img";
-        av.append(img);
-      } else {
-        av.textContent = (a.name || "?").slice(0,1).toUpperCase();
-      }
-      const meta = document.createElement("div");
-      const nm = document.createElement("div"); nm.className = "name"; nm.textContent = a.name;
-      const sub = document.createElement("div"); sub.className = "role"; sub.textContent = [a.title, a.company].filter(Boolean).join(" • ");
-      meta.append(nm, sub);
-      who.append(av, meta);
-
-      const link = document.createElement("a"); link.className="link"; link.textContent="LinkedIn"; link.target="_blank"; link.rel="noreferrer";
-      if(a.linkedin) link.href=a.linkedin; else { link.href="#"; link.style.pointerEvents="none"; link.style.opacity=".5"; }
-
-      row.append(who, link);
-      if(a.notes){
-        const notes=document.createElement("div"); notes.style.marginTop="6px"; notes.textContent=a.notes; 
-        wrap.append(row, notes);
-      } else {
-        wrap.append(row);
-      }
-        // Contact chips (email / phone)
-const contact = document.createElement("div");
-contact.style.marginTop = "6px";
-contact.style.display = "flex";
-contact.style.gap = "8px";
-contact.style.flexWrap = "wrap";
-
-if (a.email) {
-  const emailLink = document.createElement("a");
-  emailLink.className = "chip";
-  emailLink.href = `mailto:${a.email}`;
-  emailLink.textContent = a.email;
-  contact.append(emailLink);
-}
-if (a.phone) {
-  const phoneLink = document.createElement("a");
-  phoneLink.className = "chip";
-  const tel = a.phone.replace(/[^\d+\-\s()]/g, "");
-  phoneLink.href = `tel:${tel}`;
-  phoneLink.textContent = a.phone;
-  contact.append(phoneLink);
-}
-
-if (contact.children.length) wrap.append(contact);
-      rightCol.append(wrap);
+      inner.append(left, tools);
+      row.append(inner);
+      root.append(row);
     });
-
-    // Left column: description / talking points / prep (unchanged)
-    const leftCol = document.createElement("div");
-    if (m.description) leftCol.append(renderNotes(m.description));
-    if (m.talkingPoints){
-      const k=document.createElement("div"); k.className="kicker"; k.textContent="Suggested talking points";
-      const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
-      box.append(renderNotes(m.talkingPoints));
-      leftCol.append(k, box);
-    }
-    if (m.prepChecklist){
-      const k=document.createElement("div"); k.className="kicker"; k.textContent="Prep checklist";
-      const box=document.createElement("div"); box.style.background="var(--primary-50)"; box.style.borderRadius="12px"; box.style.padding="12px";
-      box.append(renderNotes(m.prepChecklist));
-      leftCol.append(k, box);
-    }
-    const edit = document.createElement("button"); edit.className="btn"; edit.textContent="✏️ Edit details";
-    edit.onclick = ()=> openMeetingDialog(m);
-    leftCol.append(edit);
-
-    inner.append(rightCol, leftCol);
-    c.append(inner);
-card.append(head, c);
-    target.append(card);
-  });
-}
-function updateTbdUI(){
-  const dateTBD = m_dateTBD.checked;
-  const timeTBD = m_timeTBD.checked;
-
-  if (dateTBD){
-    // No date, no time
-    rowDateTimes.classList.add("hidden");
-    rowDateOnly.classList.add("hidden");
-  } else if (timeTBD){
-    // Date known, time unknown
-    rowDateTimes.classList.add("hidden");
-    rowDateOnly.classList.remove("hidden");
-  } else {
-    // Normal
-    rowDateTimes.classList.remove("hidden");
-    rowDateOnly.classList.add("hidden");
-  }
-}
-m_dateTBD.onchange = updateTbdUI;
-m_timeTBD.onchange = updateTbdUI;
-function renderTravel(){
-  const root = travelSection;
-  root.innerHTML = "";
-
-  const add = document.createElement("button");
-  add.className = "btn";
-  add.textContent = "➕ Add travel";
-  add.onclick = () => {
-    t_type.value   = "flight";
-    t_label.value  = "";
-    t_conf.value   = "";
-    t_details.value= "";
-    t_start.value  = "";
-    t_end.value    = "";
-    t_startDate.value = "";
-    t_endDate.value   = "";
-
-    updateTravelDateInputs();      // show datetime by default for flight
-    travelDialog.dataset.editId = "";
-    travelDialog.showModal();
-  };
-  root.append(add);
-
-  const spacer = document.createElement("div");
-  spacer.className = "spacer";
-  root.append(spacer);
-
-  if (travel.length === 0){
-    const div = document.createElement("div");
-    div.className = "muted";
-    div.textContent = "No travel saved.";
-    root.append(div);
-    return;
   }
 
-  travel.forEach(t => {
-    const row   = document.createElement("div"); row.className = "item";
-    const inner = document.createElement("div"); inner.className = "item-c";
-
-    const left  = document.createElement("div");
-    const head  = document.createElement("div"); head.className = "title";
-    head.textContent = `[${t.type.toUpperCase()}] ${t.label}`;
-
-    const sub   = document.createElement("div");
-    sub.className = "muted";
-    sub.style.fontSize = "12px";
-
-    const bits = [];
-    if (t.confirmation) bits.push(`Conf#: ${t.confirmation}`);
-    if (t.type === "hotel"){
-      if (t.startISO) bits.push(`Check-in ${fmtDate(t.startISO)}`);
-      if (t.endISO)   bits.push(`Check-out ${fmtDate(t.endISO)}`);
-    } else {
-      if (t.startISO) bits.push(`Start ${fmtDate(t.startISO)} ${fmtTime(t.startISO)}`);
-      if (t.endISO)   bits.push(`End ${fmtDate(t.endISO)} ${fmtTime(t.endISO)}`);
-    }
-    sub.textContent = bits.join(" • ");
-
-    if (t.details){
-      const d = document.createElement("div");
-      d.style.fontSize = "12px";
-      d.textContent = t.details;
-      left.append(head, sub, d);
-    } else {
-      left.append(head, sub);
-    }
-
-    const tools = document.createElement("div"); tools.className = "tools";
-    const edit  = document.createElement("button"); edit.className = "btn sm"; edit.textContent = "✏️";
-    edit.onclick = () => {
-      t_type.value   = t.type;
-      t_label.value  = t.label;
-      t_conf.value   = t.confirmation || "";
-      t_details.value= t.details || "";
-function toYMD(iso){
-  if (!iso) return "";
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
-      // populate date/datetime inputs based on type
-      if (t.type === "hotel"){
-        t_startDate.value = toYMD(t.startISO);
-        t_endDate.value   = toYMD(t.endISO);
-        t_start.value = ""; t_end.value = "";
-      } else {
-        t_start.value = t.startISO ? new Date(t.startISO).toISOString().slice(0,16) : "";
-        t_end.value   = t.endISO   ? new Date(t.endISO).toISOString().slice(0,16)   : "";
-        t_startDate.value = ""; t_endDate.value = "";
-      }
-
-      updateTravelDateInputs();
-      travelDialog.dataset.editId = t.id;
-      travelDialog.showModal();
-    };
-
-    const del = document.createElement("button"); del.className = "btn sm"; del.textContent = "🗑️";
-    del.onclick = async () => {
-      if (!confirm("Delete this travel item?")) return;
-      try { await deleteTravel(t.id); }
-     catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
-    };
-
-    tools.append(edit, del);
-    inner.append(left, tools);
-    row.append(inner);
-    root.append(row);
-  });
-}
-  function openMeetingDialog(m){
-  meetingDialog.dataset.editId = m?.id || "";
-  dlgTitle.textContent = m ? "Edit meeting" : "New meeting";
-  m_title.value = m?.title || "";
-  m_location.value = m?.location || "";
-  m_booth.value = m?.booth || "";
-
-  const toLocalInput = (d) => {
-    const dt = new Date(d);
-    dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
-    return dt.toISOString().slice(0,16);
-  };
-
-  // Default datetimes (normal case)
-  m_start.value = toLocalInput(m ? m.startISO : new Date());
-  m_end.value   = toLocalInput(m ? m.endISO   : new Date(Date.now()+60*60*1000));
-  m_desc.value  = m?.description || "";
-
-  // NEW: set TBD flags from doc (booleans)
-  m_dateTBD.checked = !!m?.dateTBD;
-  m_timeTBD.checked = !!m?.timeTBD;
-
-  // NEW: if time-only TBD, seed the date picker from startISO (or today)
-  if (!m_dateTBD.checked && m_timeTBD.checked){
-    const base = m?.startISO ? new Date(m.startISO) : new Date();
-    // YYYY-MM-DD for the <input type="date">
-    const yyyy = base.getFullYear();
-    const mm = String(base.getMonth()+1).padStart(2,'0');
-    const dd = String(base.getDate()).padStart(2,'0');
-    m_dateOnly.value = `${yyyy}-${mm}-${dd}`;
-  } else {
-    m_dateOnly.value = "";
-  }
-
-  // NEW: reflect correct rows
-  updateTbdUI();
-
-  // Load attendees (unchanged)
-  currentAttendees = Array.isArray(m?.attendees) ? structuredClone(m.attendees) : [];
-  renderAttendeeEditor(currentAttendees);
-  addAttendeeBtn.onclick = () => {
-    currentAttendees = [...currentAttendees, blankAttendee()];
-    renderAttendeeEditor(currentAttendees);
-  };
-
-
-  meetingDialog.showModal();
-}
-async function saveMeetingFromDialog(){
-  const id = meetingDialog.dataset.editId;
-  const dateTBD = m_dateTBD.checked;
-  const timeTBD = m_timeTBD.checked;
-
-  const base = {
-    id: id || uid(),
-    title: m_title.value.trim(),
-    location: m_location.value.trim(),
-    booth: m_booth.value.trim(),
-    attendees: collectAttendeesFromEditor(),
-    description: m_desc.value.trim(),
-    dateTBD,
-    timeTBD
-  };
-  if (!base.title){ alert("Title required"); return; }
-
-  // Decide how we store timing
-  if (dateTBD){
-    // Unknown date/time: keep an anchor so Firestore orderBy('startISO') works,
-    // but we will explicitly ignore dateTBD in all day calculations.
-    base.startISO = new Date(0).toISOString();            // Jan 1, 1970
-    base.endISO   = new Date(60*60*1000).toISOString();   // +1h
-    base.dateOnly = "";                                    // none
-  } else if (timeTBD){
-    // Date known, time unknown: we store midnight for grouping by day,
-    // and render "TBD" instead of the time.
-    if (!m_dateOnly.value){ alert("Pick a date (or mark Date TBD)."); return; }
-    const d = new Date(m_dateOnly.value);                 // local midnight
-    base.startISO = d.toISOString();
-    base.endISO   = new Date(d.getTime() + 60*60*1000).toISOString(); // +1h
-    base.dateOnly = m_dateOnly.value;                     // 'YYYY-MM-DD' for convenience
-  } else {
-    // Normal meeting
-    const start = new Date(m_start.value);
-    const end   = new Date(m_end.value);
-    if (!(m_start.value && m_end.value)){ alert("Start and end are required (or mark TBD)."); return; }
-    if (end <= start){ alert("End time must be after start time."); return; }
-    base.startISO = start.toISOString();
-    base.endISO   = end.toISOString();
-    base.dateOnly = "";
-  }
-
-  const now = Date.now();
-  if (!id) base.createdAtMs = now;
-  base.updatedAtMs = now;
-
-  try {
-    await upsertMeeting(base);
-    meetingDialog.close();
-  } catch (e){
-    console.error(e);
-    alert('Cloud save failed.');
-  }
-}
-
-function renderLogo(){
+function renderLogo() {
   if (!logoUrl) {
     brandLogo.removeAttribute('src');
     brandLogo.classList.add('hidden');
-    setLogoBtn.classList.remove('hidden');
+    setLogoBtn?.classList.remove('hidden');
     return;
   }
-
   const probe = new Image();
   probe.onload = () => {
     brandLogo.src = logoUrl;
     brandLogo.classList.remove('hidden');
-    setLogoBtn.classList.add('hidden');
+    setLogoBtn?.classList.add('hidden');
   };
   probe.onerror = () => {
     console.error('[logo] preview failed to load');
-    // ❌ don’t clear Firestore here; just show the button again
     brandLogo.removeAttribute('src');
     brandLogo.classList.add('hidden');
-    setLogoBtn.classList.remove('hidden');
-    // If this keeps happening, the saved value might be invalid; then manually clear:
-    // setSharedDoc('logoUrl', '');
+    setLogoBtn?.classList.remove('hidden');
   };
   probe.src = logoUrl;
 }
-async function clearAllMeetings() {
-  const snap = await MEETINGS.get();
-  const batch = db.batch();
-  snap.forEach(doc => batch.delete(doc.ref));
-  await batch.commit();
-}
 
-async function clearAllTravel() {
-  const snap = await TRAVEL.get();
-  const batch = db.batch();
-  snap.forEach(doc => batch.delete(doc.ref));
-  await batch.commit();
-}
-async function renderImportExport(){
+function renderImportExport() {
   const root = document.createElement("div");
+
   const inp = document.createElement("input");
-inp.type = "file";
-inp.accept = "application/json";
-inp.className = "hidden";
+  inp.type = "file"; inp.accept = "application/json"; inp.className = "hidden";
 
-  const btnImport = document.createElement("button"); 
-  btnImport.className = "btn sm"; 
-  btnImport.textContent = "⬆️ Import";
-
-  const btnExport = document.createElement("button"); 
-  btnExport.className = "btn sm"; 
-  btnExport.textContent = "⬇️ Export";
-    const btnWipeMeetings = document.createElement("button");
-  btnWipeMeetings.className = "btn sm";
-  btnWipeMeetings.textContent = "🧹 Clear meetings";
-  btnWipeMeetings.onclick = async () => {
-    if (!confirm("Delete ALL meetings?")) return;
-    try { await clearAllMeetings(); alert("Meetings cleared."); }
-    catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
-  };
-
-  const btnWipeTravel = document.createElement("button");
-  btnWipeTravel.className = "btn sm";
-  btnWipeTravel.textContent = "🧹 Clear travel";
-  btnWipeTravel.onclick = async () => {
-    if (!confirm("Delete ALL travel?")) return;
-    try { await clearAllTravel(); alert("Travel cleared."); }
-    catch(e){ console.error(e); alert("Delete failed: " + (e.code || e.message)); }
-  };
+  const btnImport = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "⬆️ Import" });
+  const btnExport = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "⬇️ Export" });
+  const btnWipeMeetings = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "🧹 Clear meetings" });
+  const btnWipeTravel   = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "🧹 Clear travel" });
 
   btnImport.onclick = () => inp.click();
-
-
-  // IMPORT
-inp.onchange = async (e) => {
-  const f = e.target.files?.[0];
-  if (!f) return;
-
-  try {
-    const parsed = JSON.parse(await f.text());
-    const meetingsIn = Array.isArray(parsed.meetings) ? parsed.meetings : [];
-    const travelIn   = Array.isArray(parsed.travel)   ? parsed.travel   : [];
-    const sessionsIn = Array.isArray(parsed.sessions) ? parsed.sessions : [];
-
-    // --- helper to merge by 'id' and skip stale docs (older updatedAtMs) ---
-    async function mergeCollection(colRef, incoming) {
-      if (!incoming.length) return;
-
-      const curSnap = await colRef.get();
-      const curMap = new Map(curSnap.docs.map(d => [d.id, d.data()]));
-
-      const batch = db.batch();
-      let writes = 0;
-
-      for (const obj of incoming) {
-        const id = obj.id || uid();
-        obj.id = id;
-
-        const existing = curMap.get(id);
-        const incomingUpdated = obj.updatedAtMs ?? 0;
-        const existingUpdated = existing?.updatedAtMs ?? 0;
-
-        if (!existing || incomingUpdated >= existingUpdated) {
-          batch.set(colRef.doc(id), obj, { merge: true });
-          writes++;
-        }
-      }
-
-      if (writes) await batch.commit();
-    }
-autoPickedDayOnce = false;
-    await mergeCollection(MEETINGS, meetingsIn);
-    await mergeCollection(TRAVEL,   travelIn);
-    await mergeCollection(SESSIONS, sessionsIn);
-
-    if ('gptUrl'  in parsed) await setSharedDoc('gptUrl',  parsed.gptUrl  || '');
-    if ('logoUrl' in parsed) await setSharedDoc('logoUrl', parsed.logoUrl || '');
-
-    alert('Import complete (merged). Local edits preserved.');
-  } catch (err) {
-    console.error(err);
-    const msg = err?.name === 'SyntaxError'
-      ? 'Invalid JSON: ' + err.message
-      : (err.code || err.message || 'unknown error');
-    alert('Import failed: ' + msg);
-  } finally {
-    inp.value = '';
-  }
-};
-
-  // EXPORT
   btnExport.onclick = async () => {
-    const [msSnap, tsSnap, ssSnap] = await Promise.all([
-      MEETINGS.get(),
-      TRAVEL.get(),
-      SESSIONS.get()
-    ]);
-    const file = {
-      meetings: msSnap.docs.map(d => d.data()),
-      travel:   tsSnap.docs.map(d => d.data()),
-      sessions: ssSnap.docs.map(d => d.data()),
-      gptUrl,
-      logoUrl
-    };
-    const blob = new Blob([JSON.stringify(file, null, 2)], {type:"application/json"});
-    const url = URL.createObjectURL(blob);
+    const exportObj = { meetings, travel, sessions };
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
-    a.href = url; a.download = `tradeshow-data-${new Date().toISOString().slice(0,10)}.json`;
+    a.href = URL.createObjectURL(blob);
+    a.download = `export-${ymdInTZ(new Date().toISOString())}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
   };
 
- root.append(btnImport, btnExport, btnWipeMeetings, btnWipeTravel, inp);
-  $("#importExport").innerHTML = "";
-  $("#importExport").append(root);
+  btnWipeMeetings.onclick = async () => {
+    if (!confirm("Delete ALL meetings?")) return;
+    try {
+      const snap = await MEETINGS.get();
+      const batch = db.batch();
+      snap.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      alert("Meetings cleared.");
+    } catch (e) { console.error(e); alert("Delete failed: " + (e.code || e.message)); }
+  };
+
+  btnWipeTravel.onclick = async () => {
+    if (!confirm("Delete ALL travel?")) return;
+    try {
+      const snap = await TRAVEL.get();
+      const batch = db.batch();
+      snap.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      alert("Travel cleared.");
+    } catch (e) { console.error(e); alert("Delete failed: " + (e.code || e.message)); }
+  };
+
+  inp.onchange = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const parsed = JSON.parse(await f.text());
+      const meetingsIn = Array.isArray(parsed.meetings) ? parsed.meetings : [];
+      const travelIn   = Array.isArray(parsed.travel)   ? parsed.travel   : [];
+      const sessionsIn = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+      await Promise.all([
+        ...meetingsIn.map(upsertMeeting),
+        ...travelIn.map(upsertTravel),
+        ...sessionsIn.map(upsertSession),
+      ]);
+      alert("Import complete.");
+    } catch (err) {
+      console.error(err);
+      alert("Import failed: " + (err.message || "Invalid file"));
+    } finally { e.target.value = ""; }
+  };
+
+  root.append(btnImport, " ", btnExport, " ", btnWipeMeetings, " ", btnWipeTravel, inp);
+
+  const host = document.getElementById("importExport"); // correct ID
+  if (host) { host.innerHTML = ""; host.append(root); }
 }
-    // event wiring
-    prevDayBtn.onclick = ()=> shiftDay(-1);
-    nextDayBtn.onclick = ()=> shiftDay(1);
-    tabAgenda.onclick = ()=>{ view="agenda"; renderAll(); };
-    tabHourly.onclick = ()=>{ view="hourly"; renderAll(); };
-    addMeetingBtn.onclick = ()=> openMeetingDialog();
-    dlgCancel.onclick = ()=> meetingDialog.close();
-    dlgSave.onclick = ()=> saveMeetingFromDialog();
 
- 
-
-    t_cancel.onclick = ()=> travelDialog.close();
-    t_type.addEventListener("change", updateTravelDateInputs);
-t_save.onclick = async () => {
-  const id = travelDialog.dataset.editId;
-  const payload = {
-    id: id || uid(),
-    type: t_type.value,
-    label: t_label.value.trim(),
-    confirmation: t_conf.value.trim(),
-    details: t_details.value.trim(),
-  };
-
-  if (!payload.label){ alert("Label required"); return; }
-
-  if (t_type.value === "hotel") {
-    // date-only: store midnight UTC for both (or whichever provided)
-    if (t_startDate.value) payload.startISO = new Date(`${t_startDate.value}T12:00:00`).toISOString();
-    if (t_endDate.value)   payload.endISO   = new Date(`${t_endDate.value}T12:00:00`).toISOString();
-  } else {
-    // datetime for flights/ground
-    if (t_start.value) payload.startISO = new Date(t_start.value).toISOString();
-    if (t_end.value)   payload.endISO   = new Date(t_end.value).toISOString();
-    if (payload.startISO && payload.endISO && new Date(payload.endISO) < new Date(payload.startISO)){
-      alert("Travel end must be after start."); return;
+  function renderAll() {
+    renderHeaderControls();
+    if (view === "agenda") {
+      agendaList.classList.remove("hidden");
+      hourlyGrid.classList.add("hidden");
+      renderAgenda();
+    } else {
+      hourlyGrid.classList.remove("hidden");
+      agendaList.classList.add("hidden");
+      renderHourly();
     }
+    renderDetails();
+    const ds = $("#detailsStandalone");
+    if (ds) renderDetails(ds, "all");
+    renderTravel();
+    renderLogo();
+    renderImportExport();
   }
 
-  const now = Date.now();
-  if (!id) payload.createdAtMs = now;
-  payload.updatedAtMs = now;
+  // ========= Meeting dialog =========
+  function renderAttendeeRow(a) {
+    const wrap = document.createElement("div"); wrap.className = "ae"; wrap.dataset.id = a.id;
+    const grid = document.createElement("div"); grid.className = "ae-grid";
 
-  try {
-    await upsertTravel(payload);
-    travelDialog.close();
-  } catch (e){
-    console.error(e);
-    alert('Save failed.');
+    const avatar = document.createElement("div"); avatar.className = "ae-avatar";
+    if (a.photoUrl) { const img = document.createElement("img"); img.src = a.photoUrl; avatar.append(img); }
+    else { avatar.textContent = (a.name || "?").slice(0, 1).toUpperCase(); }
+
+    const right = document.createElement("div"); right.className = "col gap8";
+
+    const row1 = document.createElement("div"); row1.className = "ae-two";
+    const inName = Object.assign(document.createElement("input"), { placeholder: "Full name", value: a.name || "", name: "a_name" });
+    const inTitle= Object.assign(document.createElement("input"), { placeholder: "Job title", value: a.title || "", name: "a_title" });
+    row1.append(inName, inTitle);
+
+    const row2 = document.createElement("div"); row2.className = "ae-two";
+    const inCompany = Object.assign(document.createElement("input"), { placeholder: "Company", value: a.company || "", name: "a_company" });
+    const linkWrap = document.createElement("div"); linkWrap.className = "ae-linkwrap";
+    const inLinkedin = Object.assign(document.createElement("input"), { placeholder: "LinkedIn URL (https://…)", value: a.linkedin || "", name: "a_linkedin" });
+    const btnOpen = Object.assign(document.createElement("button"), { className: "btn sm", type: "button", textContent: "🔗 Open", disabled: !inLinkedin.value.trim() });
+    btnOpen.onclick = () => { const url = sanitizeUrl(inLinkedin.value); if (!url) return; window.open(url, "_blank", "noopener,noreferrer"); };
+    inLinkedin.addEventListener("input", () => { btnOpen.disabled = !inLinkedin.value.trim(); });
+    linkWrap.append(inLinkedin, btnOpen);
+    row2.append(inCompany, linkWrap);
+
+    const rowContact = document.createElement("div"); rowContact.className = "ae-two";
+    const inEmail = Object.assign(document.createElement("input"), { type: "email", placeholder: "Email", value: a.email || "", name: "a_email" });
+    const inPhone = Object.assign(document.createElement("input"), { type: "tel", placeholder: "Phone", value: a.phone || "", name: "a_phone" });
+    rowContact.append(inEmail, inPhone);
+
+    const inPhotoHidden = Object.assign(document.createElement("input"), { type: "hidden", name: "a_photo", value: a.photoUrl || "" });
+    const inPhotoFile = Object.assign(document.createElement("input"), { type: "file", accept: "image/*" });
+    const btnClearPhoto = Object.assign(document.createElement("button"), { className: "btn sm", type: "button", textContent: "🧹 Clear photo", style: "margin-left:8px" });
+    btnClearPhoto.onclick = () => { a.photoUrl = ""; inPhotoHidden.value = ""; avatar.innerHTML = (inName.value || "?").slice(0, 1).toUpperCase(); };
+    inPhotoFile.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0]; if (!file) return;
+      try {
+        const dataUrl = await fileToDataUrl(file, { maxW: 256, maxH: 256, quality: 0.9 });
+        a.photoUrl = dataUrl; inPhotoHidden.value = dataUrl;
+        avatar.innerHTML = ""; const img2 = document.createElement("img"); img2.src = dataUrl; avatar.append(img2);
+      } catch (err) { console.error(err); alert("Could not read that image. Try a PNG or JPG."); }
+      finally { inPhotoFile.value = ""; }
+    });
+    inName.addEventListener("input", () => { if (!inPhotoHidden.value) avatar.textContent = (inName.value || "?").slice(0, 1).toUpperCase(); });
+
+    const photoRow = document.createElement("div"); photoRow.className = "ae-two";
+    const photoLeft = document.createElement("div"); const photoRight = document.createElement("div");
+    photoLeft.append(inPhotoFile, btnClearPhoto); photoRow.append(photoLeft, photoRight);
+
+    const inNotes = document.createElement("textarea"); inNotes.placeholder = "Notes"; inNotes.value = a.notes || "";
+
+    const actions = document.createElement("div"); actions.className = "ae-actions";
+    const btnRemove = Object.assign(document.createElement("button"), { className: "btn sm", textContent: "🗑️ Remove" });
+    btnRemove.onclick = () => { currentAttendees = currentAttendees.filter(x => x.id !== a.id); renderAttendeeEditor(currentAttendees); };
+    actions.append(btnRemove);
+
+    right.append(row1, row2, rowContact, photoRow, inPhotoHidden, inNotes);
+    grid.append(avatar, right);
+    wrap.append(grid, actions);
+    return wrap;
   }
-};
 
-// Top tab switching
-$$("#topTabs .tab").forEach(btn => {
-  btn.onclick = () => switchTopTab(btn.dataset.toptab);
-});
-
-logoFile.addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
-  let dataUrl = '';
-  try {
-    dataUrl = await fileToDataUrl(file, { maxW: 360, maxH: 120, quality: 0.9 });
-
-    // ✅ Immediate local preview so it "works" even if cloud save fails
-    logoUrl = dataUrl;
-    renderLogo();  // shows it right away
-
-  } catch (err) {
-    console.error('[logo] decode failed', err);
-    alert('Could not read that image (decode). Try a PNG or JPG.');
-    logoFile.value = '';
-    return;
+  function renderAttendeeEditor(list) {
+    attendeeEditorRoot.innerHTML = "";
+    if (!list || !list.length) {
+      const empty = document.createElement("div"); empty.className = "muted"; empty.textContent = "No attendees yet.";
+      attendeeEditorRoot.append(empty); return;
+    }
+    list.forEach(a => attendeeEditorRoot.append(renderAttendeeRow(a)));
   }
 
-  // Optional: guard against huge base64 strings (doc size safety)
-  if (dataUrl.length > 750_000) {
-    alert('Logo is too large after resize. Try a smaller image.');
-    logoFile.value = '';
-    return;
-  }
-
-  try {
-    await setSharedDoc('logoUrl', dataUrl);  // cloud save
-  } catch (err) {
-    console.error('[logo] cloud save failed', err);
-    // Show the real reason, e.g. "permission-denied"
-    alert('Could not save logo to the cloud: ' + (err.code || err.message || 'unknown error') +
-          '\nTip: check Firestore rules for /tradeshow/{docId}.');
-  } finally {
-    logoFile.value = '';
-  }
-});
-
-// Utility: read & (optionally) resize the image to a data URL
-function fileToDataUrl(file, { maxW = 360, maxH = 120, quality = 0.9 } = {}) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('File read failed'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Image decode failed'));
-      img.onload = () => {
-        // Calculate target size
-        const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
-        const w = Math.round(img.width * ratio);
-        const h = Math.round(img.height * ratio);
-
-        // Draw into a canvas (resize if needed)
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-
-        // Choose output format
-        const wantPng = file.type.includes('png') || file.type.includes('svg');
-        const mime = wantPng ? 'image/png' : 'image/jpeg';
-        const out = canvas.toDataURL(mime, quality);
-
-        resolve(out);
+  function collectAttendeesFromEditor() {
+    const rows = Array.from(attendeeEditorRoot.querySelectorAll(".ae"));
+    return rows.map(row => {
+      const id = row.dataset.id;
+      const v = (sel) => row.querySelector(sel)?.value?.trim() || "";
+      return {
+        id,
+        name: v('input[name="a_name"]'),
+        title: v('input[name="a_title"]'),
+        company: v('input[name="a_company"]'),
+        linkedin: v('input[name="a_linkedin"]'),
+        email: v('input[name="a_email"]'),
+        phone: v('input[name="a_phone"]'),
+        photoUrl: v('input[name="a_photo"]'),
+        notes: row.querySelector("textarea")?.value?.trim() || ""
       };
-      img.src = reader.result;
+    });
+  }
+
+  function updateTbdUI() {
+    const dateTBD = m_dateTBD.checked;
+    const timeTBD = m_timeTBD.checked;
+    if (dateTBD) { rowDateTimes.classList.add("hidden"); rowDateOnly.classList.add("hidden"); }
+    else if (timeTBD) { rowDateTimes.classList.add("hidden"); rowDateOnly.classList.remove("hidden"); }
+    else { rowDateTimes.classList.remove("hidden"); rowDateOnly.classList.add("hidden"); }
+  }
+
+  function openMeetingDialog(m) {
+    meetingDialog.dataset.editId = m?.id || "";
+    dlgTitle.textContent = m ? "Edit meeting" : "New meeting";
+    m_title.value = m?.title || "";
+    m_location.value = m?.location || "";
+    m_booth.value = m?.booth || "";
+
+    const toLocalInput = (d) => { const dt = new Date(d); dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset()); return dt.toISOString().slice(0, 16); };
+    m_start.value = toLocalInput(m ? m.startISO : new Date());
+    m_end.value   = toLocalInput(m ? m.endISO   : new Date(Date.now() + 60 * 60 * 1000));
+    m_desc.value  = m?.description || "";
+
+    m_dateTBD.checked = !!m?.dateTBD;
+    m_timeTBD.checked = !!m?.timeTBD;
+
+    if (!m_dateTBD.checked && m_timeTBD.checked) {
+      const base = m?.startISO ? new Date(m.startISO) : new Date();
+      m_dateOnly.value = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
+    } else m_dateOnly.value = "";
+
+    currentAttendees = Array.isArray(m?.attendees) ? structuredClone(m.attendees) : [];
+    renderAttendeeEditor(currentAttendees);
+
+    updateTbdUI();
+    meetingDialog.showModal();
+  }
+
+  async function saveMeetingFromDialog() {
+    const id = meetingDialog.dataset.editId;
+    const dateTBD = m_dateTBD.checked;
+    const timeTBD = m_timeTBD.checked;
+
+    const base = {
+      id: id || uid(),
+      title: m_title.value.trim(),
+      location: m_location.value.trim(),
+      booth: m_booth.value.trim(),
+      attendees: collectAttendeesFromEditor(),
+      description: m_desc.value.trim(),
+      dateTBD, timeTBD
     };
-    reader.readAsDataURL(file);
+    if (!base.title) { alert("Title required"); return; }
+
+    if (dateTBD) {
+      base.startISO = new Date(0).toISOString();
+      base.endISO   = new Date(60 * 60 * 1000).toISOString();
+      base.dateOnly = "";
+    } else if (timeTBD) {
+      if (!m_dateOnly.value) { alert("Pick a date (or mark Date TBD)."); return; }
+      const d = new Date(m_dateOnly.value);
+      base.startISO = d.toISOString();
+      base.endISO   = new Date(d.getTime() + 60 * 60 * 1000).toISOString();
+      base.dateOnly = m_dateOnly.value;
+    } else {
+      if (!(m_start.value && m_end.value)) { alert("Start and end are required (or mark TBD)."); return; }
+      const start = new Date(m_start.value), end = new Date(m_end.value);
+      if (end <= start) { alert("End time must be after start time."); return; }
+      base.startISO = start.toISOString();
+      base.endISO   = end.toISOString();
+      base.dateOnly = "";
+    }
+
+    const now = Date.now();
+    if (!id) base.createdAtMs = now;
+    base.updatedAtMs = now;
+
+    try { await upsertMeeting(base); meetingDialog.close(); }
+    catch (e) { console.error(e); alert('Cloud save failed.'); }
+  }
+
+  // ========= Travel dialog =========
+  function saveTravelFromDialog() {
+    const id = travelDialog.dataset.editId;
+    const type = t_type.value;
+    const label = (t_label.value || "").trim();
+
+    if (!label) { alert("Label required"); return; }
+
+    const base = {
+      id: id || uid(),
+      type,
+      label,
+      confirmation: (t_conf.value || "").trim(),
+      details: (t_details.value || "").trim()
+    };
+
+    if (type === "hotel") {
+      if (!t_startDate.value || !t_endDate.value) { alert("Check-in and Check-out are required."); return; }
+      base.startISO = new Date(t_startDate.value).toISOString();
+      base.endISO   = new Date(t_endDate.value).toISOString();
+    } else {
+      if (!t_start.value || !t_end.value) { alert("Start and End date/time are required."); return; }
+      base.startISO = new Date(t_start.value).toISOString();
+      base.endISO   = new Date(t_end.value).toISOString();
+      if (new Date(base.endISO) <= new Date(base.startISO)) { alert("End must be after Start."); return; }
+    }
+
+    return upsertTravel(base).then(() => travelDialog.close())
+      .catch(e => { console.error(e); alert("Save failed: " + (e.code || e.message)); });
+  }
+
+  // ========= Tabs & View =========
+  function switchTopTab(name) {
+    if (!TOP_TABS.includes(name)) name = "schedule";
+    activeTopTab = name;
+    localStorage.setItem("activeTopTab", name);
+
+    const meetingsDescEl = document.querySelector('#view-meetings .card-h .desc');
+    if (meetingsDescEl) {
+      meetingsDescEl.textContent =
+        (name === "meetings") ? "All upcoming meetings (includes Date-TBD)." : "All meeting cards for the active day.";
+    }
+
+    $("#view-schedule").classList.toggle("hidden", name !== "schedule");
+    $("#view-travel").classList.toggle("hidden",   name !== "travel");
+    $("#view-gpt").classList.toggle("hidden",      name !== "gpt");
+    $("#view-meetings").classList.toggle("hidden", name !== "meetings");
+
+    $$("#topTabs .tab").forEach(btn => btn.classList.toggle("active", btn.dataset.toptab === name));
+
+    renderAll();
+  }
+
+  // ========= Wiring =========
+  // day + view
+  prevDayBtn.onclick = () => shiftDay(-1);
+  nextDayBtn.onclick = () => shiftDay(1);
+  tabAgenda.onclick  = () => { view = "agenda"; renderAll(); };
+  tabHourly.onclick  = () => { view = "hourly"; renderAll(); };
+  addMeetingBtn.onclick = () => openMeetingDialog();
+
+  // meeting dialog
+  dlgSave.onclick   = () => saveMeetingFromDialog();
+  dlgCancel.onclick = () => meetingDialog.close();
+  m_dateTBD.onchange = updateTbdUI;
+  m_timeTBD.onchange = updateTbdUI;
+
+  // travel dialog
+  t_type.onchange = updateTravelDateInputs;
+  t_save.onclick  = () => saveTravelFromDialog();
+  t_cancel.onclick= () => travelDialog.close();
+
+  // top tabs
+  $$("#topTabs .tab").forEach(btn => btn.onclick = () => switchTopTab(btn.dataset.toptab));
+const mtabAddMeeting = document.getElementById("mtabAddMeeting");
+mtabAddMeeting?.addEventListener("click", () => openMeetingDialog());
+  // travel collapse
+  const initialTravelCollapsed = localStorage.getItem("travelCollapsed") === "1";
+  setTravelCollapsed(initialTravelCollapsed, false);
+  travelCollapseBtn.onclick = () => setTravelCollapsed(!travelSection.classList.contains("hidden"));
+
+  // logo + personal gpt
+ 
+  logoCancel.onclick = () => logoDialog.close();
+  logoSave.onclick = async () => {
+    let url = (logoInput.value || "").trim();
+    if (!url) { logoDialog.close(); return; }
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    try { await setSharedDoc('logoUrl', url); logoUrl = url; renderLogo(); }
+    catch (err) { alert("Could not save logo: " + (err.code || err.message || "unknown error")); }
+    finally { logoDialog.close(); }
+  };
+
+  logoFile?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    let dataUrl = '';
+    try {
+      dataUrl = await fileToDataUrl(file, { maxW: 360, maxH: 120, quality: 0.9 });
+      if (dataUrl.length > 750_000) { alert('Logo is too large after resize. Try a smaller image.'); e.target.value = ''; return; }
+      logoUrl = dataUrl; renderLogo();
+      await setSharedDoc('logoUrl', dataUrl);
+    } catch (err) {
+      console.error('[logo] save failed', err);
+      alert('Could not save logo: ' + (err.code || err.message || 'unknown error'));
+    } finally {
+      e.target.value = '';
+    }
   });
-}
-function renderAll(){
-  renderHeaderControls();
-  (view==="agenda"
-    ? (agendaList.classList.remove("hidden"), hourlyGrid.classList.add("hidden"), renderAgenda())
-    : (hourlyGrid.classList.remove("hidden"), agendaList.classList.add("hidden"), renderHourly()));
 
-  // Right-column details (Schedule view)
-  renderDetails();
-
-  // Meetings tab (all upcoming, with attendees)
-  const ds = $("#detailsStandalone");
-  if (ds) renderDetails(ds, "all");   // ← add this back
-
-  renderTravel();
-  renderLogo();
-  renderImportExport();
-}
-    // INITIAL LOAD from Firestore + realtime subscriptions
-    (async function init(){
-  // One-time simple settings
-  gptUrl  = (await getSharedDoc('gptUrl',  "")) || "";
-  logoUrl = (await getSharedDoc('logoUrl', "")) || "";
- renderLogo();
-
-  // Live settings
   onSharedDoc('logoUrl', v => { logoUrl = v || ""; renderLogo(); });
 
-  // Realtime meetings (subcollection)
-MEETINGS.orderBy('startISO').onSnapshot(snap => {
-  meetings = snap.docs.map(d => d.data());
+  // GPT link
+  onSharedDoc('gptUrl', v => { gptUrl = v || ""; });
+  openGptBtn.onclick = () => {
+    if (gptUrl && /^https?:\/\//i.test(gptUrl)) window.open(gptUrl, "_blank", "noopener,noreferrer");
+    else { gptInput.value = gptUrl || ""; gptDialog.showModal(); }
+  };
+  gptSave.onclick = async () => {
+    let url = (gptInput.value || "").trim();
+    if (!url) { gptDialog.close(); return; }
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    try { await setSharedDoc("gptUrl", url); gptUrl = url; }
+    catch (err) { alert("Could not save GPT link: " + (err.code || err.message || "unknown error")); }
+    finally { gptDialog.close(); }
+  };
+  gptCancel.onclick = () => gptDialog.close();
 
-  const mDays = daysFromCalendar();
-  if (mDays.length && (!mDays.some(d => sameDay(d, activeDate)) || !autoPickedDayOnce)) {
-    const best = pickMostCurrentDay(mDays);
-    if (best) {
-      activeDate = best;
-      autoPickedDayOnce = true;
+  // chat
+  chatForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const content = chatInput.value.trim();
+    if (!content) return;
+    appendMsg("user", content);
+    chatInput.value = ""; chatInput.disabled = true; chatSend.disabled = true;
+
+    const ctx = {
+      date: fmtDate(activeDate),
+      meetings: itemsForDay(activeDate).filter(x => x.kind === "meeting").map(m => ({
+        title: m.title,
+        start: m.timeTBD ? "TBD" : fmtTime(m.startISO),
+        end:   m.timeTBD ? "TBD" : fmtTime(m.endISO),
+        location: displayLocation(m) || "",
+        booth: m.booth || ""
+      })),
+      travel: travel.map(t => ({ type: t.type, label: t.label, start: t.startISO || "", end: t.endISO || "" }))
+    };
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: content, context: ctx })
+      });
+      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      appendMsg("assistant", data.reply || "(no reply)");
+    } catch (err) {
+      console.error(err);
+      appendMsg("assistant", "Sorry, I couldn’t reach the assistant.");
+    } finally {
+      chatInput.disabled = false; chatSend.disabled = false; chatInput.focus();
     }
+  });
+
+  // ========= Live subscriptions + init =========
+  async function init() {
+    try {
+      gptUrl  = (await getSharedDoc('gptUrl', "")) || "";
+      logoUrl = (await getSharedDoc('logoUrl', "")) || "";
+    } catch { /* optional */ }
+    renderLogo();
+
+    MEETINGS.orderBy('startISO').onSnapshot(snap => {
+      meetings = snap.docs.map(d => d.data());
+      const mDays = daysFromCalendar();
+      if (mDays.length && (!mDays.some(d => sameDay(d, activeDate)) || !autoPickedDayOnce)) {
+        const best = pickMostCurrentDay(mDays);
+        if (best) { activeDate = best; autoPickedDayOnce = true; }
+      }
+      renderAll();
+      switchTopTab(activeTopTab);
+    });
+
+    TRAVEL.orderBy('startISO').onSnapshot(snap => { travel = snap.docs.map(d => d.data()); renderTravel(); });
+
+    SESSIONS.orderBy('startISO').onSnapshot(snap => {
+      sessions = snap.docs.map(d => d.data());
+      const sDays = daysFromCalendar();
+      if (sDays.length && (!sDays.some(d => sameDay(d, activeDate)) || !autoPickedDayOnce)) {
+        const best = pickMostCurrentDay(sDays);
+        if (best) { activeDate = best; autoPickedDayOnce = true; }
+      }
+      renderAll();
+    });
+
+    renderAll();
+    switchTopTab(activeTopTab);
   }
 
-  renderAll();
-  switchTopTab(activeTopTab);
-});
-// Realtime travel (subcollection)
-TRAVEL.orderBy('startISO').onSnapshot(snap => {
-  travel = snap.docs.map(d => d.data());
-  renderTravel();
-});
-
-  renderAll(); // first paint
-      switchTopTab(activeTopTab); 
+  // kick off
+  init();
 })();
-  </script>
+</script>
 </body>
 </html>
