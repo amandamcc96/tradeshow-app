@@ -644,12 +644,12 @@ header h1, header .muted { color:#fff; }
             <button id="addMeetingBtn" class="btn primary wfull">➕ Add meeting</button>
           </div>
         </div>
-
+    </div> 
     
         
       <!-- Right -->
       <div class="col gap16" id="detailsCol"></div>
-       </div> <!-- end .grid -->
+  </div> <!-- end .grid -->
 </section>
 
   <!-- Dialogs -->
@@ -887,27 +887,54 @@ header h1, header .muted { color:#fff; }
 
   // ========= Firestore refs (provided by your app env) =========
   // These must exist in the page scope: db, COL, onSharedDoc, getSharedDoc, setSharedDoc
-  const MEETINGS = COL.doc('meetings').collection('items');
-  const TRAVEL   = COL.doc('travel').collection('items');
-  const SESSIONS = COL.doc('sessions').collection('items');
+const hasCOL = (typeof COL !== 'undefined') && COL && typeof COL.doc === 'function';
 
-  const upsertMeeting = (m) => {
-    const id = m.id || uid();
-    return MEETINGS.doc(id).set({ ...m, id }, { merge: true });
-  };
-  const deleteMeeting = (id) => MEETINGS.doc(id).delete();
+const MEETINGS = hasCOL ? COL.doc('meetings').collection('items') : null;
+const TRAVEL   = hasCOL ? COL.doc('travel').collection('items')   : null;
+const SESSIONS = hasCOL ? COL.doc('sessions').collection('items') : null;
 
-  const upsertTravel = (t) => {
-    const id = t.id || uid();
-    return TRAVEL.doc(id).set({ ...t, id }, { merge: true });
-  };
-  const deleteTravel = (id) => TRAVEL.doc(id).delete();
+const upsertMeeting = (m) => {
+  const id = m.id || uid();
+  if (MEETINGS) return MEETINGS.doc(id).set({ ...m, id }, { merge: true });
+  // local fallback so UI still works
+  meetings = [...meetings.filter(x => x.id !== id), { ...m, id }];
+  renderAll();
+  return Promise.resolve();
+};
+const deleteMeeting = (id) => {
+  if (MEETINGS) return MEETINGS.doc(id).delete();
+  meetings = meetings.filter(x => x.id !== id);
+  renderAll();
+  return Promise.resolve();
+};
 
-  const upsertSession = (s) => {
-    const id = s.id || uid();
-    return SESSIONS.doc(id).set({ ...s, id }, { merge: true });
-  };
-  const deleteSession = (id) => SESSIONS.doc(id).delete();
+const upsertTravel = (t) => {
+  const id = t.id || uid();
+  if (TRAVEL) return TRAVEL.doc(id).set({ ...t, id }, { merge: true });
+  travel = [...travel.filter(x => x.id !== id), { ...t, id }];
+  renderAll();
+  return Promise.resolve();
+};
+const deleteTravel = (id) => {
+  if (TRAVEL) return TRAVEL.doc(id).delete();
+  travel = travel.filter(x => x.id !== id);
+  renderAll();
+  return Promise.resolve();
+};
+
+const upsertSession = (s) => {
+  const id = s.id || uid();
+  if (SESSIONS) return SESSIONS.doc(id).set({ ...s, id }, { merge: true });
+  sessions = [...sessions.filter(x => x.id !== id), { ...s, id }];
+  renderAll();
+  return Promise.resolve();
+};
+const deleteSession = (id) => {
+  if (SESSIONS) return SESSIONS.doc(id).delete();
+  sessions = sessions.filter(x => x.id !== id);
+  renderAll();
+  return Promise.resolve();
+};
 
   // ========= State =========
   let gptUrl   = "";
@@ -1054,7 +1081,10 @@ travelCollapseBtn?.addEventListener('click', () => {
     travelCollapseBtn.textContent = collapsed ? "▸" : "▾";
     if (persist) localStorage.setItem("travelCollapsed", collapsed ? "1" : "0");
   }
-
+function initTravelCollapsed() {
+  const collapsed = localStorage.getItem("travelCollapsed") === "1";
+  setTravelCollapsed(collapsed, /* persist */ false);
+}
   function daysFromCalendar() {
     const byDay = new Map();
     // include meetings with known date + all sessions
@@ -1099,7 +1129,8 @@ travelCollapseBtn?.addEventListener('click', () => {
   }
 
   function appendMsg(role, text) {
-    const row = document.createElement("div");
+    if (!chatWindow) return; // no chat UI on this page
+  const row = document.createElement("div");
     row.className = `msg ${role}`;
     row.innerHTML = `<div class="who">${role === "user" ? "You" : "Assistant"}</div>
                      <div class="bubble">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
@@ -1848,7 +1879,8 @@ function renderImportExport() {
 // Open the "Set logo URL" dialog
 setLogoUrlBtn?.addEventListener('click', () => {
   logoInput.value = logoUrl || '';   // preload current value if any
-  logoDialog.showModal();
+if (logoDialog?.showModal) logoDialog.showModal();
+  else logoDialog?.setAttribute('open', ''); // fallback for older browsers
 });
   logoFile?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -1952,48 +1984,39 @@ addAttendeeBtn.onclick = () => {
   });
 
   // ========= Live subscriptions + init =========
-async function init() {
-  try {
-    gptUrl  = (await getSharedDoc('gptUrl', "")) || "";
-    logoUrl = (await getSharedDoc('logoUrl', "")) || "";
-  } catch (err) {
-    console.warn('Shared docs not available yet:', err);
-  }
-  renderLogo();
+  async function init() {
+    if (MEETINGS && TRAVEL && SESSIONS) {
+      MEETINGS.orderBy('startISO').onSnapshot(snap => {
+        meetings = snap.docs.map(d => d.data());
+        if (!autoPickedDayOnce) {
+          const days = daysFromCalendar();
+          const pick = pickMostCurrentDay(days);
+          if (pick) activeDate = pick;
+          autoPickedDayOnce = true;
+        }
+        renderAll();
+      });
 
- try {
-  MEETINGS.orderBy('startISO').onSnapshot(snap => {
-    meetings = snap.docs.map(d => d.data());
-    if (!autoPickedDayOnce) {
-      const days = daysFromCalendar();
-      const pick = pickMostCurrentDay(days);
-      if (pick) activeDate = pick;
-      autoPickedDayOnce = true;
+      TRAVEL.orderBy('startISO').onSnapshot(snap => {
+        travel = snap.docs.map(d => d.data());
+        renderAll();
+      });
+
+      SESSIONS.orderBy('startISO').onSnapshot(snap => {
+        sessions = snap.docs.map(d => d.data());
+        renderAll();
+      });
+    } else {
+      console.warn('Firestore unavailable; running in local-only mode.');
+      renderAll();
     }
-    renderAll();
-  });
+  }
 
-  TRAVEL.orderBy('startISO').onSnapshot(snap => {
-    travel = snap.docs.map(d => d.data());
-    renderAll();
-  });
-
-  SESSIONS.orderBy('startISO').onSnapshot(snap => {
-    sessions = snap.docs.map(d => d.data());
-    renderAll();
-  });
-} catch (err) {
-  console.warn('Firestore wiring failed; running in local-only mode:', err);
-}
-
-
-  // Always render and enable tabs regardless of Firebase status
+  // Render once so the UI is interactive immediately,
+  // then set the initial tab and start any live listeners.
   renderAll();
-  switchTopTab(activeTopTab || 'schedule');
-
-
-
-  // kick off
+  switchTopTab(activeTopTab || 'gpt');
+  initTravelCollapsed(); 
   init();
 })();
 </script>
